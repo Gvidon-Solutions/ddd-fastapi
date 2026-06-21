@@ -1,0 +1,69 @@
+"""SQLModel implementation of the user repository."""
+
+from sqlmodel import Session, col, func, select
+
+from app.domain.user.entities import User
+from app.domain.user.repositories import UserRepository
+from app.domain.user.value_objects import EmailAddress, UserId
+from app.infrastructure.sqlmodel.user.user_dto import UserDTO
+
+
+class UserRepositoryImpl(UserRepository):
+    """Persist user entities with SQLModel."""
+
+    def __init__(self, session: Session):
+        """Store the active SQLModel session."""
+        self.session = session
+
+    def save(self, user: User) -> None:
+        """Insert or update a user."""
+        user_dto = UserDTO.from_entity(user)
+        existing_user = self.session.get(UserDTO, user.id.value)
+        if existing_user is None:
+            self.session.add(user_dto)
+            return
+
+        existing_user.email = user_dto.email
+        existing_user.hashed_password = user_dto.hashed_password
+        existing_user.full_name = user_dto.full_name
+        existing_user.is_active = user_dto.is_active
+        existing_user.is_superuser = user_dto.is_superuser
+        existing_user.created_at = user_dto.created_at
+        self.session.add(existing_user)
+
+    def find_by_id(self, user_id: UserId) -> User | None:
+        """Return a user by ID."""
+        user = self.session.get(UserDTO, user_id.value)
+        return user.to_entity() if user else None
+
+    def find_by_email(self, email: EmailAddress) -> User | None:
+        """Return a user by email."""
+        statement = select(UserDTO).where(UserDTO.email == email.value)
+        user = self.session.exec(statement).first()
+        return user.to_entity() if user else None
+
+    def find_all(self, offset: int = 0, limit: int = 100) -> list[User]:
+        """Return users ordered newest first."""
+        statement = (
+            select(UserDTO)
+            .order_by(col(UserDTO.created_at).desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [user.to_entity() for user in self.session.exec(statement).all()]
+
+    def count(self) -> int:
+        """Return the total user count."""
+        statement = select(func.count()).select_from(UserDTO)
+        return self.session.exec(statement).one()
+
+    def delete(self, user_id: UserId) -> None:
+        """Delete a user by ID."""
+        user = self.session.get(UserDTO, user_id.value)
+        if user is not None:
+            self.session.delete(user)
+
+
+def new_user_repository(session: Session) -> UserRepository:
+    """Create a user repository bound to the active session."""
+    return UserRepositoryImpl(session)
