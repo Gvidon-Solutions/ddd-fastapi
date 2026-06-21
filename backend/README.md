@@ -22,6 +22,30 @@ uv run --project backend ty check backend/app
 uv run --project backend pytest
 ```
 
+## Agent Workers
+
+Agent workflow jobs run through Taskiq with Redis. Agent run events are published
+through FastStream to a Redis stream.
+
+```bash
+docker run -d --name skills-dddpy-redis -p 6379:6379 redis:7-alpine
+uv run --project backend taskiq worker app.infrastructure.taskiq.agent_tasks:broker
+```
+
+Agent run events are available over websocket:
+
+```text
+ws://localhost:8000/api/v1/agents/runs/{run_id}/events/ws
+```
+
+Codex CLI device-code login is available to authenticated backend admins:
+
+```text
+POST /api/v1/agents/codex/login/device
+GET  /api/v1/agents/codex/login/device/{session_id}
+GET  /api/v1/agents/codex/login/status
+```
+
 ## Tests
 
 Tests are organized by layer:

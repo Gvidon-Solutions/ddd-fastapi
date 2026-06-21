@@ -7,11 +7,20 @@ from app.config import settings
 from app.domain.user.value_objects import EmailAddress
 from app.infrastructure.di.injection import engine
 from app.infrastructure.security import new_password_hasher
+from app.infrastructure.sqlmodel.agent import AgentRunDTO, AgentRunEventDTO
 from app.infrastructure.sqlmodel.item import ItemDTO
 from app.infrastructure.sqlmodel.user import UserDTO, new_user_repository
 from app.usecase.user import new_create_user_use_case
 
-__all__ = ("ItemDTO", "SQLModel", "UserDTO", "engine", "init_db")
+__all__ = (
+    "AgentRunDTO",
+    "AgentRunEventDTO",
+    "ItemDTO",
+    "SQLModel",
+    "UserDTO",
+    "engine",
+    "init_db",
+)
 
 
 async def init_db(session: AsyncSession) -> None:

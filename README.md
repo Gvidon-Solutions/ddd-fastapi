@@ -28,6 +28,30 @@ uv run --project backend ty check backend/app
 uv run --project backend pytest
 ```
 
+## Redis, Taskiq, FastStream
+
+Redis is used as the Taskiq broker/result backend and as the FastStream event
+transport for agent run events.
+
+```bash
+docker run -d --name skills-dddpy-redis -p 6379:6379 redis:7-alpine
+uv run --project backend taskiq worker app.infrastructure.taskiq.agent_tasks:broker
+```
+
+Agent run events can be watched over websocket:
+
+```text
+ws://localhost:8000/api/v1/agents/runs/{run_id}/events/ws
+```
+
+Codex CLI device-code login is exposed for backend admins:
+
+```text
+POST /api/v1/agents/codex/login/device
+GET  /api/v1/agents/codex/login/device/{session_id}
+GET  /api/v1/agents/codex/login/status
+```
+
 ## Environments
 
 Environment files `envs/local.env`, `envs/staging.env`, and

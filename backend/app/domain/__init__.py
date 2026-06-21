@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from . import item, user
+from . import agent, item, user
 
-__all__ = ("item", "user")
+__all__ = ("agent", "item", "user")
