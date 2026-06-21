@@ -12,7 +12,7 @@ class DeleteItemUseCase(ABC):
     """Define the application boundary for item deletion."""
 
     @abstractmethod
-    def execute(self, current_user: User, item_id: ItemId) -> None:
+    async def execute(self, current_user: User, item_id: ItemId) -> None:
         """Delete an item visible to the current user."""
 
 
@@ -23,15 +23,15 @@ class DeleteItemUseCaseImpl(DeleteItemUseCase):
         """Store use case dependencies."""
         self.item_repository = item_repository
 
-    def execute(self, current_user: User, item_id: ItemId) -> None:
+    async def execute(self, current_user: User, item_id: ItemId) -> None:
         """Delete an item when it exists and access is allowed."""
-        item = self.item_repository.find_by_id(item_id)
+        item = await self.item_repository.find_by_id(item_id)
         if item is None:
             raise ItemNotFoundError
         if not current_user.is_superuser and not item.is_owned_by(current_user.id):
             raise ItemAccessDeniedError
 
-        self.item_repository.delete(item_id)
+        await self.item_repository.delete(item_id)
 
 
 def new_delete_item_use_case(item_repository: ItemRepository) -> DeleteItemUseCase:

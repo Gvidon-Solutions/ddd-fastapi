@@ -36,7 +36,7 @@ router = APIRouter(tags=["login"])
 
 
 @router.post("/login/access-token")
-def login_access_token(
+async def login_access_token(
     use_case: Annotated[
         AuthenticateUserUseCase,
         Depends(get_authenticate_user_use_case),
@@ -45,7 +45,7 @@ def login_access_token(
 ) -> Token:
     """OAuth2 compatible token login."""
     try:
-        user = use_case.execute(
+        user = await use_case.execute(
             email=EmailAddress(form_data.username),
             plain_password=form_data.password,
         )
@@ -67,19 +67,19 @@ def login_access_token(
 
 
 @router.post("/login/test-token", response_model=UserPublic)
-def test_token(current_user: CurrentUser) -> UserPublic:
+async def test_token(current_user: CurrentUser) -> UserPublic:
     """Test an access token."""
     return UserPublic.from_entity(current_user)
 
 
 @router.post("/password-recovery/{email}")
-def recover_password(
+async def recover_password(
     email: str,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> Message:
     """Send a password recovery email when the user exists."""
     try:
-        user = user_repository.find_by_email(EmailAddress(email))
+        user = await user_repository.find_by_email(EmailAddress(email))
     except ValueError:
         user = None
 
@@ -101,7 +101,7 @@ def recover_password(
 
 
 @router.post("/reset-password/")
-def reset_password(
+async def reset_password(
     body: NewPassword,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
     password_hasher: Annotated[PasswordHasher, Depends(get_password_hasher)],
@@ -111,14 +111,14 @@ def reset_password(
     if not email:
         raise HTTPException(status_code=400, detail="Invalid token")
 
-    user = user_repository.find_by_email(EmailAddress(email))
+    user = await user_repository.find_by_email(EmailAddress(email))
     if user is None or not user.is_active:
         raise HTTPException(status_code=400, detail="Invalid token")
 
     user.update_password_hash(
         PasswordHash(password_hasher.hash_password(body.new_password).value)
     )
-    user_repository.save(user)
+    await user_repository.save(user)
     return Message(message="Password updated successfully")
 
 
@@ -127,12 +127,12 @@ def reset_password(
     dependencies=[Depends(get_current_active_superuser)],
     response_class=HTMLResponse,
 )
-def recover_password_html_content(
+async def recover_password_html_content(
     email: str,
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
 ) -> HTMLResponse:
     """Return password recovery email HTML for admins."""
-    user = user_repository.find_by_email(EmailAddress(email))
+    user = await user_repository.find_by_email(EmailAddress(email))
     if user is None:
         raise HTTPException(
             status_code=404,

@@ -11,19 +11,19 @@ class ItemRepository(ABC):
     """Provide the abstraction for item persistence operations."""
 
     @abstractmethod
-    def save(self, item: Item) -> None:
+    async def save(self, item: Item) -> None:
         """Persist the provided item entity."""
 
     @abstractmethod
-    def find_by_id(self, item_id: ItemId) -> Item | None:
+    async def find_by_id(self, item_id: ItemId) -> Item | None:
         """Retrieve an item by its identifier."""
 
     @abstractmethod
-    def find_all(self, offset: int = 0, limit: int = 100) -> list[Item]:
+    async def find_all(self, offset: int = 0, limit: int = 100) -> list[Item]:
         """Return items ordered by repository policy."""
 
     @abstractmethod
-    def find_by_owner_id(
+    async def find_by_owner_id(
         self,
         owner_id: UserId,
         offset: int = 0,
@@ -32,13 +32,13 @@ class ItemRepository(ABC):
         """Return items owned by the provided user."""
 
     @abstractmethod
-    def count(self) -> int:
+    async def count(self) -> int:
         """Return the total number of items."""
 
     @abstractmethod
-    def count_by_owner_id(self, owner_id: UserId) -> int:
+    async def count_by_owner_id(self, owner_id: UserId) -> int:
         """Return the total number of items owned by the provided user."""
 
     @abstractmethod
-    def delete(self, item_id: ItemId) -> None:
+    async def delete(self, item_id: ItemId) -> None:
         """Remove an item by its identifier."""

@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.domain.user.entities import User
@@ -29,7 +29,7 @@ class UserDTO(SQLModel, table=True):
     full_name: str | None = Field(default=None, max_length=255)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
+        sa_column=Column(DateTime(timezone=True), nullable=True),
     )
     items: list["ItemDTO"] = Relationship(
         back_populates="owner",

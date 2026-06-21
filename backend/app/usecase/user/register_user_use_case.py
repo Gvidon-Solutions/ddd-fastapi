@@ -13,7 +13,7 @@ class RegisterUserUseCase(ABC):
     """Define the application boundary for public registration."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         email: EmailAddress,
         plain_password: str,
@@ -32,14 +32,14 @@ class RegisterUserUseCaseImpl(RegisterUserUseCase):
         self.user_repository = user_repository
         self.password_hasher = password_hasher
 
-    def execute(
+    async def execute(
         self,
         email: EmailAddress,
         plain_password: str,
         full_name: FullName | None = None,
     ) -> User:
         """Create, persist, and return a new regular user."""
-        if self.user_repository.find_by_email(email) is not None:
+        if await self.user_repository.find_by_email(email) is not None:
             raise EmailAlreadyExistsError
 
         user = User.create(
@@ -48,7 +48,7 @@ class RegisterUserUseCaseImpl(RegisterUserUseCase):
             full_name=full_name,
             is_superuser=False,
         )
-        self.user_repository.save(user)
+        await self.user_repository.save(user)
         return user
 
 

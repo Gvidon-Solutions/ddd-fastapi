@@ -13,7 +13,7 @@ class AuthenticateUserUseCase(ABC):
     """Define the application boundary for credential authentication."""
 
     @abstractmethod
-    def execute(self, email: EmailAddress, plain_password: str) -> User:
+    async def execute(self, email: EmailAddress, plain_password: str) -> User:
         """Authenticate a user and return the matching account."""
 
 
@@ -27,9 +27,9 @@ class AuthenticateUserUseCaseImpl(AuthenticateUserUseCase):
         self.user_repository = user_repository
         self.password_hasher = password_hasher
 
-    def execute(self, email: EmailAddress, plain_password: str) -> User:
+    async def execute(self, email: EmailAddress, plain_password: str) -> User:
         """Authenticate a user and refresh the hash when needed."""
-        user = self.user_repository.find_by_email(email)
+        user = await self.user_repository.find_by_email(email)
         if user is None:
             raise InvalidCredentialsError
 
@@ -43,7 +43,7 @@ class AuthenticateUserUseCaseImpl(AuthenticateUserUseCase):
             raise InactiveUserError
         if result.updated_hash is not None:
             user.update_password_hash(result.updated_hash)
-            self.user_repository.save(user)
+            await self.user_repository.save(user)
 
         return user
 

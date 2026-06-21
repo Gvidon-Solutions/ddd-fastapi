@@ -17,3 +17,6 @@ extend-exclude = [
     "backend/coverage/",
     "backend/htmlcov/",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]

@@ -12,7 +12,7 @@ class UpdateCurrentUserPasswordUseCase(ABC):
     """Define the application boundary for current-user password changes."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         current_user: User,
         current_plain_password: str,
@@ -31,7 +31,7 @@ class UpdateCurrentUserPasswordUseCaseImpl(UpdateCurrentUserPasswordUseCase):
         self.user_repository = user_repository
         self.password_hasher = password_hasher
 
-    def execute(
+    async def execute(
         self,
         current_user: User,
         current_plain_password: str,
@@ -50,7 +50,7 @@ class UpdateCurrentUserPasswordUseCaseImpl(UpdateCurrentUserPasswordUseCase):
         current_user.update_password_hash(
             self.password_hasher.hash_password(new_plain_password)
         )
-        self.user_repository.save(current_user)
+        await self.user_repository.save(current_user)
         return current_user
 
 

@@ -1,6 +1,7 @@
 """SQLModel implementation of the user repository."""
 
-from sqlmodel import Session, col, func, select
+from sqlmodel import col, func, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domain.user.entities import User
 from app.domain.user.repositories import UserRepository
@@ -11,14 +12,14 @@ from app.infrastructure.sqlmodel.user.user_dto import UserDTO
 class UserRepositoryImpl(UserRepository):
     """Persist user entities with SQLModel."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """Store the active SQLModel session."""
         self.session = session
 
-    def save(self, user: User) -> None:
+    async def save(self, user: User) -> None:
         """Insert or update a user."""
         user_dto = UserDTO.from_entity(user)
-        existing_user = self.session.get(UserDTO, user.id.value)
+        existing_user = await self.session.get(UserDTO, user.id.value)
         if existing_user is None:
             self.session.add(user_dto)
             return
@@ -31,18 +32,19 @@ class UserRepositoryImpl(UserRepository):
         existing_user.created_at = user_dto.created_at
         self.session.add(existing_user)
 
-    def find_by_id(self, user_id: UserId) -> User | None:
+    async def find_by_id(self, user_id: UserId) -> User | None:
         """Return a user by ID."""
-        user = self.session.get(UserDTO, user_id.value)
+        user = await self.session.get(UserDTO, user_id.value)
         return user.to_entity() if user else None
 
-    def find_by_email(self, email: EmailAddress) -> User | None:
+    async def find_by_email(self, email: EmailAddress) -> User | None:
         """Return a user by email."""
         statement = select(UserDTO).where(UserDTO.email == email.value)
-        user = self.session.exec(statement).first()
+        result = await self.session.exec(statement)
+        user = result.first()
         return user.to_entity() if user else None
 
-    def find_all(self, offset: int = 0, limit: int = 100) -> list[User]:
+    async def find_all(self, offset: int = 0, limit: int = 100) -> list[User]:
         """Return users ordered newest first."""
         statement = (
             select(UserDTO)
@@ -50,20 +52,22 @@ class UserRepositoryImpl(UserRepository):
             .offset(offset)
             .limit(limit)
         )
-        return [user.to_entity() for user in self.session.exec(statement).all()]
+        result = await self.session.exec(statement)
+        return [user.to_entity() for user in result.all()]
 
-    def count(self) -> int:
+    async def count(self) -> int:
         """Return the total user count."""
         statement = select(func.count()).select_from(UserDTO)
-        return self.session.exec(statement).one()
+        result = await self.session.exec(statement)
+        return result.one()
 
-    def delete(self, user_id: UserId) -> None:
+    async def delete(self, user_id: UserId) -> None:
         """Delete a user by ID."""
-        user = self.session.get(UserDTO, user_id.value)
+        user = await self.session.get(UserDTO, user_id.value)
         if user is not None:
-            self.session.delete(user)
+            await self.session.delete(user)
 
 
-def new_user_repository(session: Session) -> UserRepository:
+def new_user_repository(session: AsyncSession) -> UserRepository:
     """Create a user repository bound to the active session."""
     return UserRepositoryImpl(session)

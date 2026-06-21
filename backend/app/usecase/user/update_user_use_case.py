@@ -17,7 +17,7 @@ class UpdateUserUseCase(ABC):
     """Define the application boundary for administrator user updates."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         current_user: User,
         user_id: UserId,
@@ -41,7 +41,7 @@ class UpdateUserUseCaseImpl(UpdateUserUseCase):
         self.user_repository = user_repository
         self.password_hasher = password_hasher
 
-    def execute(
+    async def execute(
         self,
         current_user: User,
         user_id: UserId,
@@ -56,12 +56,12 @@ class UpdateUserUseCaseImpl(UpdateUserUseCase):
         if not current_user.is_superuser:
             raise UserAccessDeniedError
 
-        user = self.user_repository.find_by_id(user_id)
+        user = await self.user_repository.find_by_id(user_id)
         if user is None:
             raise UserNotFoundError
 
         if email is not None and email != user.email:
-            existing_user = self.user_repository.find_by_email(email)
+            existing_user = await self.user_repository.find_by_email(email)
             if existing_user is not None and existing_user.id != user.id:
                 raise EmailAlreadyExistsError
             user.update_email(email)
@@ -83,7 +83,7 @@ class UpdateUserUseCaseImpl(UpdateUserUseCase):
             else:
                 user.revoke_superuser()
 
-        self.user_repository.save(user)
+        await self.user_repository.save(user)
         return user
 
 

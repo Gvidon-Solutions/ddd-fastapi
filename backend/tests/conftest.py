@@ -1,10 +1,12 @@
 """Shared test fixtures."""
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 
 import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domain.item.entities import Item
 from app.domain.item.value_objects import ItemDescription, ItemTitle
@@ -12,6 +14,12 @@ from app.domain.user.entities import User
 from app.domain.user.value_objects import EmailAddress, FullName, PasswordHash
 from app.infrastructure.sqlmodel.item import ItemDTO
 from app.infrastructure.sqlmodel.user import UserDTO
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Run async tests on asyncio."""
+    return "asyncio"
 
 
 @pytest.fixture
@@ -46,10 +54,10 @@ def item(user: User) -> Item:
 
 
 @pytest.fixture
-def db_session() -> Generator[Session]:
+async def db_session() -> AsyncGenerator[AsyncSession]:
     """Yield an in-memory SQLModel session."""
-    engine = create_engine(
-        "sqlite://",
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
@@ -57,6 +65,10 @@ def db_session() -> Generator[Session]:
     # Import DTOs before create_all so relationship metadata is registered.
     assert UserDTO.__tablename__ == "user"
     assert ItemDTO.__tablename__ == "item"
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
+    async with engine.begin() as connection:
+        await connection.run_sync(SQLModel.metadata.create_all)
+
+    async with AsyncSession(engine) as session:
         yield session
+
+    await engine.dispose()

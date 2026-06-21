@@ -12,7 +12,7 @@ class UpdateCurrentUserUseCase(ABC):
     """Define the application boundary for current-user profile updates."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         current_user: User,
         email: EmailAddress | None = None,
@@ -28,7 +28,7 @@ class UpdateCurrentUserUseCaseImpl(UpdateCurrentUserUseCase):
         """Store use case dependencies."""
         self.user_repository = user_repository
 
-    def execute(
+    async def execute(
         self,
         current_user: User,
         email: EmailAddress | None = None,
@@ -36,7 +36,7 @@ class UpdateCurrentUserUseCaseImpl(UpdateCurrentUserUseCase):
     ) -> User:
         """Persist updates for the current user's profile."""
         if email is not None and email != current_user.email:
-            existing_user = self.user_repository.find_by_email(email)
+            existing_user = await self.user_repository.find_by_email(email)
             if existing_user is not None and existing_user.id != current_user.id:
                 raise EmailAlreadyExistsError
             current_user.update_email(email)
@@ -44,7 +44,7 @@ class UpdateCurrentUserUseCaseImpl(UpdateCurrentUserUseCase):
         if full_name is not None:
             current_user.update_full_name(full_name)
 
-        self.user_repository.save(current_user)
+        await self.user_repository.save(current_user)
         return current_user
 
 

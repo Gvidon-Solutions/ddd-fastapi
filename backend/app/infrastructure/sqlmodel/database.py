@@ -1,6 +1,7 @@
 """Database bootstrap helpers."""
 
-from sqlmodel import Session, SQLModel
+from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.domain.user.value_objects import EmailAddress
@@ -13,10 +14,12 @@ from app.usecase.user import new_create_user_use_case
 __all__ = ("ItemDTO", "SQLModel", "UserDTO", "engine", "init_db")
 
 
-def init_db(session: Session) -> None:
+async def init_db(session: AsyncSession) -> None:
     """Initialize required data."""
     user_repository = new_user_repository(session)
-    user = user_repository.find_by_email(EmailAddress(str(settings.FIRST_SUPERUSER)))
+    user = await user_repository.find_by_email(
+        EmailAddress(str(settings.FIRST_SUPERUSER))
+    )
     if user is not None:
         return
 
@@ -24,7 +27,7 @@ def init_db(session: Session) -> None:
         user_repository=user_repository,
         password_hasher=new_password_hasher(),
     )
-    create_user.execute(
+    await create_user.execute(
         email=EmailAddress(str(settings.FIRST_SUPERUSER)),
         plain_password=settings.FIRST_SUPERUSER_PASSWORD,
         is_superuser=True,

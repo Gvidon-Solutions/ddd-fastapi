@@ -1,6 +1,7 @@
 """SQLModel implementation of the item repository."""
 
-from sqlmodel import Session, col, func, select
+from sqlmodel import col, func, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domain.item.entities import Item
 from app.domain.item.repositories import ItemRepository
@@ -12,14 +13,14 @@ from app.infrastructure.sqlmodel.item.item_dto import ItemDTO
 class ItemRepositoryImpl(ItemRepository):
     """Persist item entities with SQLModel."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         """Store the active SQLModel session."""
         self.session = session
 
-    def save(self, item: Item) -> None:
+    async def save(self, item: Item) -> None:
         """Insert or update an item."""
         item_dto = ItemDTO.from_entity(item)
-        existing_item = self.session.get(ItemDTO, item.id.value)
+        existing_item = await self.session.get(ItemDTO, item.id.value)
         if existing_item is None:
             self.session.add(item_dto)
             return
@@ -30,12 +31,12 @@ class ItemRepositoryImpl(ItemRepository):
         existing_item.created_at = item_dto.created_at
         self.session.add(existing_item)
 
-    def find_by_id(self, item_id: ItemId) -> Item | None:
+    async def find_by_id(self, item_id: ItemId) -> Item | None:
         """Return an item by ID."""
-        item = self.session.get(ItemDTO, item_id.value)
+        item = await self.session.get(ItemDTO, item_id.value)
         return item.to_entity() if item else None
 
-    def find_all(self, offset: int = 0, limit: int = 100) -> list[Item]:
+    async def find_all(self, offset: int = 0, limit: int = 100) -> list[Item]:
         """Return all items ordered newest first."""
         statement = (
             select(ItemDTO)
@@ -43,9 +44,10 @@ class ItemRepositoryImpl(ItemRepository):
             .offset(offset)
             .limit(limit)
         )
-        return [item.to_entity() for item in self.session.exec(statement).all()]
+        result = await self.session.exec(statement)
+        return [item.to_entity() for item in result.all()]
 
-    def find_by_owner_id(
+    async def find_by_owner_id(
         self,
         owner_id: UserId,
         offset: int = 0,
@@ -59,29 +61,32 @@ class ItemRepositoryImpl(ItemRepository):
             .offset(offset)
             .limit(limit)
         )
-        return [item.to_entity() for item in self.session.exec(statement).all()]
+        result = await self.session.exec(statement)
+        return [item.to_entity() for item in result.all()]
 
-    def count(self) -> int:
+    async def count(self) -> int:
         """Return the total item count."""
         statement = select(func.count()).select_from(ItemDTO)
-        return self.session.exec(statement).one()
+        result = await self.session.exec(statement)
+        return result.one()
 
-    def count_by_owner_id(self, owner_id: UserId) -> int:
+    async def count_by_owner_id(self, owner_id: UserId) -> int:
         """Return the total item count for one user."""
         statement = (
             select(func.count())
             .select_from(ItemDTO)
             .where(ItemDTO.owner_id == owner_id.value)
         )
-        return self.session.exec(statement).one()
+        result = await self.session.exec(statement)
+        return result.one()
 
-    def delete(self, item_id: ItemId) -> None:
+    async def delete(self, item_id: ItemId) -> None:
         """Delete an item by ID."""
-        item = self.session.get(ItemDTO, item_id.value)
+        item = await self.session.get(ItemDTO, item_id.value)
         if item is not None:
-            self.session.delete(item)
+            await self.session.delete(item)
 
 
-def new_item_repository(session: Session) -> ItemRepository:
+def new_item_repository(session: AsyncSession) -> ItemRepository:
     """Create an item repository bound to the active session."""
     return ItemRepositoryImpl(session)

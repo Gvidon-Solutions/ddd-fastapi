@@ -2,8 +2,10 @@
 
 import pytest
 
+from app.domain.item.entities import Item
 from app.domain.item.exceptions import ItemAccessDeniedError, ItemNotFoundError
 from app.domain.item.value_objects import ItemDescription, ItemId, ItemTitle
+from app.domain.user.entities import User
 from app.usecase.item import (
     new_create_item_use_case,
     new_delete_item_use_case,
@@ -13,72 +15,130 @@ from app.usecase.item import (
 )
 from tests.usecase.fakes import InMemoryItemRepository
 
+pytestmark = pytest.mark.anyio
 
-def test_create_item_persists_item(user) -> None:  # type: ignore[no-untyped-def]
+
+async def test_create_item_persists_item(user: User) -> None:
+    # Arrange
     repository = InMemoryItemRepository()
     use_case = new_create_item_use_case(repository)
 
-    item = use_case.execute(user, ItemTitle("Title"), ItemDescription("Body"))
+    # Act
+    item = await use_case.execute(user, ItemTitle("Title"), ItemDescription("Body"))
 
-    assert repository.find_by_id(item.id) == item
+    # Assert
+    assert await repository.find_by_id(item.id) == item
     assert item.owner_id == user.id
 
 
-def test_find_items_filters_by_owner_for_regular_users(user, admin, item) -> None:  # type: ignore[no-untyped-def]
-    admin_item = new_create_item_use_case(InMemoryItemRepository()).execute(
-        admin,
-        ItemTitle("Admin item"),
-    )
+async def test_find_items_returns_only_owned_items_for_regular_user(
+    user: User,
+    admin: User,
+    item: Item,
+) -> None:
+    # Arrange
+    admin_item = Item.create(admin.id, ItemTitle("Admin item"))
     repository = InMemoryItemRepository([item, admin_item])
     use_case = new_find_items_use_case(repository)
 
-    regular_result = use_case.execute(user)
-    admin_result = use_case.execute(admin)
+    # Act
+    result = await use_case.execute(user)
 
-    assert regular_result.data == [item]
-    assert regular_result.count == 1
-    assert admin_result.count == 2
+    # Assert
+    assert result.data == [item]
+    assert result.count == 1
 
 
-def test_find_item_by_id_enforces_access(user, admin, item) -> None:  # type: ignore[no-untyped-def]
+async def test_find_items_returns_all_items_for_admin(
+    admin: User,
+    item: Item,
+) -> None:
+    # Arrange
+    admin_item = Item.create(admin.id, ItemTitle("Admin item"))
+    repository = InMemoryItemRepository([item, admin_item])
+    use_case = new_find_items_use_case(repository)
+
+    # Act
+    result = await use_case.execute(admin)
+
+    # Assert
+    assert result.count == 2
+    assert result.data == [item, admin_item]
+
+
+async def test_find_item_by_id_returns_owned_item(user: User, item: Item) -> None:
+    # Arrange
     repository = InMemoryItemRepository([item])
     use_case = new_find_item_by_id_use_case(repository)
 
-    assert use_case.execute(user, item.id) == item
-    assert use_case.execute(admin, item.id) == item
+    # Act
+    result = await use_case.execute(user, item.id)
 
-    other_user = admin
-    other_user.revoke_superuser()
+    # Assert
+    assert result == item
+
+
+async def test_find_item_by_id_allows_admin_access(admin: User, item: Item) -> None:
+    # Arrange
+    repository = InMemoryItemRepository([item])
+    use_case = new_find_item_by_id_use_case(repository)
+
+    # Act
+    result = await use_case.execute(admin, item.id)
+
+    # Assert
+    assert result == item
+
+
+async def test_find_item_by_id_rejects_other_regular_user(
+    admin: User,
+    item: Item,
+) -> None:
+    # Arrange
+    admin.revoke_superuser()
+    repository = InMemoryItemRepository([item])
+    use_case = new_find_item_by_id_use_case(repository)
+
+    # Act / Assert
     with pytest.raises(ItemAccessDeniedError):
-        use_case.execute(other_user, item.id)
+        await use_case.execute(admin, item.id)
 
 
-def test_find_item_by_id_raises_not_found(user) -> None:  # type: ignore[no-untyped-def]
+async def test_find_item_by_id_raises_not_found(user: User) -> None:
+    # Arrange
     use_case = new_find_item_by_id_use_case(InMemoryItemRepository())
 
+    # Act / Assert
     with pytest.raises(ItemNotFoundError):
-        use_case.execute(user, ItemId.generate())
+        await use_case.execute(user, ItemId.generate())
 
 
-def test_update_item_updates_owned_item(user, item) -> None:  # type: ignore[no-untyped-def]
+async def test_update_item_updates_owned_item(user: User, item: Item) -> None:
+    # Arrange
     repository = InMemoryItemRepository([item])
     use_case = new_update_item_use_case(repository)
 
-    updated = use_case.execute(
+    # Act
+    updated = await use_case.execute(
         user,
         item.id,
         ItemTitle("Updated"),
         ItemDescription("Updated body"),
     )
 
+    # Assert
     assert updated.title == ItemTitle("Updated")
-    assert repository.find_by_id(item.id) == updated
+    assert updated.description == ItemDescription("Updated body")
+    assert await repository.find_by_id(item.id) == updated
 
 
-def test_delete_item_removes_owned_item(user, item) -> None:  # type: ignore[no-untyped-def]
+async def test_delete_item_removes_owned_item(user: User, item: Item) -> None:
+    # Arrange
     repository = InMemoryItemRepository([item])
     use_case = new_delete_item_use_case(repository)
 
-    use_case.execute(user, item.id)
+    # Act
+    await use_case.execute(user, item.id)
 
-    assert repository.find_by_id(item.id) is None
+    # Assert
+    assert await repository.find_by_id(item.id) is None

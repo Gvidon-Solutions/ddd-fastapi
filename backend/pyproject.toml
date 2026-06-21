@@ -5,12 +5,12 @@ description = "FastAPI backend organized for DDD experiments"
 requires-python = ">=3.13,<4.0"
 dependencies = [
     "alembic<2.0.0,>=1.12.1",
+    "asyncpg<1.0.0,>=0.31.0",
     "email-validator<3.0.0.0,>=2.1.0.post1",
     "emails<1.0,>=0.6",
     "fastapi[standard]<1.0.0,>=0.114.2",
     "httpx<1.0.0,>=0.25.1",
     "jinja2<4.0.0,>=3.1.4",
-    "psycopg[binary]<4.0.0,>=3.1.13",
     "pwdlib[argon2,bcrypt]>=0.3.0",
     "pydantic>2.0",
     "pydantic-settings<3.0.0,>=2.2.1",
@@ -22,8 +22,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "aiosqlite<1.0.0,>=0.22.1",
     "coverage<8.0.0,>=7.4.3",
-    "mypy<3.0.0,>=1.8.0",
     "prek>=0.2.24,<1.0.0",
     "pytest<10.0.0,>=7.4.3",
     "ruff<1.0.0,>=0.2.2",
@@ -33,10 +33,6 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.mypy]
-strict = true
-exclude = ["venv", ".venv", "alembic"]
 
 [tool.ruff]
 target-version = "py313"
@@ -77,3 +73,6 @@ show_contexts = true
 
 [tool.ty.terminal]
 error-on-warning = true
+
+[tool.ty.environment]
+python-version = "3.13"

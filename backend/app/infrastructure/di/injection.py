@@ -1,9 +1,10 @@
 """FastAPI dependency wiring for repositories and use cases."""
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 
 from fastapi import Depends
-from sqlmodel import Session, create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.domain.item.repositories import ItemRepository
@@ -47,26 +48,30 @@ from app.usecase.user import (
 )
 from app.usecase.user.ports import PasswordHasher
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+engine = create_async_engine(str(settings.SQLALCHEMY_DATABASE_URI))
 
 
-def get_session() -> Generator[Session]:
+async def get_session() -> AsyncGenerator[AsyncSession]:
     """Yield a request-scoped SQLModel session."""
-    with Session(engine) as session:
+    async with AsyncSession(engine) as session:
         try:
             yield session
-            session.commit()
+            await session.commit()
         except Exception:
-            session.rollback()
+            await session.rollback()
             raise
 
 
-def get_item_repository(session: Session = Depends(get_session)) -> ItemRepository:
+def get_item_repository(
+    session: AsyncSession = Depends(get_session),
+) -> ItemRepository:
     """Provide an item repository."""
     return new_item_repository(session)
 
 
-def get_user_repository(session: Session = Depends(get_session)) -> UserRepository:
+def get_user_repository(
+    session: AsyncSession = Depends(get_session),
+) -> UserRepository:
     """Provide a user repository."""
     return new_user_repository(session)
 

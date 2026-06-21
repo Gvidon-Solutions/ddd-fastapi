@@ -13,7 +13,7 @@ class CreateUserUseCase(ABC):
     """Define the application boundary for administrator user creation."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         email: EmailAddress,
         plain_password: str,
@@ -35,7 +35,7 @@ class CreateUserUseCaseImpl(CreateUserUseCase):
         self.user_repository = user_repository
         self.password_hasher = password_hasher
 
-    def execute(
+    async def execute(
         self,
         email: EmailAddress,
         plain_password: str,
@@ -45,7 +45,7 @@ class CreateUserUseCaseImpl(CreateUserUseCase):
         is_superuser: bool = False,
     ) -> User:
         """Create, persist, and return a new user."""
-        if self.user_repository.find_by_email(email) is not None:
+        if await self.user_repository.find_by_email(email) is not None:
             raise EmailAlreadyExistsError
 
         user = User.create(
@@ -57,7 +57,7 @@ class CreateUserUseCaseImpl(CreateUserUseCase):
         if not is_active:
             user.deactivate()
 
-        self.user_repository.save(user)
+        await self.user_repository.save(user)
         return user
 
 

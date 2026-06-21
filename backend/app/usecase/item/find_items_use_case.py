@@ -20,7 +20,7 @@ class FindItemsUseCase(ABC):
     """Define the application boundary for listing items."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         current_user: User,
         offset: int = 0,
@@ -36,7 +36,7 @@ class FindItemsUseCaseImpl(FindItemsUseCase):
         """Store use case dependencies."""
         self.item_repository = item_repository
 
-    def execute(
+    async def execute(
         self,
         current_user: User,
         offset: int = 0,
@@ -45,17 +45,17 @@ class FindItemsUseCaseImpl(FindItemsUseCase):
         """Return a paginated item list."""
         if current_user.is_superuser:
             return FindItemsResult(
-                data=self.item_repository.find_all(offset=offset, limit=limit),
-                count=self.item_repository.count(),
+                data=await self.item_repository.find_all(offset=offset, limit=limit),
+                count=await self.item_repository.count(),
             )
 
         return FindItemsResult(
-            data=self.item_repository.find_by_owner_id(
+            data=await self.item_repository.find_by_owner_id(
                 current_user.id,
                 offset=offset,
                 limit=limit,
             ),
-            count=self.item_repository.count_by_owner_id(current_user.id),
+            count=await self.item_repository.count_by_owner_id(current_user.id),
         )
 
 

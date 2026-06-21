@@ -12,7 +12,7 @@ class FindUserByIdUseCase(ABC):
     """Define the application boundary for retrieving one user."""
 
     @abstractmethod
-    def execute(self, user_id: UserId, current_user: User) -> User:
+    async def execute(self, user_id: UserId, current_user: User) -> User:
         """Return a user visible to the current user."""
 
 
@@ -23,12 +23,12 @@ class FindUserByIdUseCaseImpl(FindUserByIdUseCase):
         """Store use case dependencies."""
         self.user_repository = user_repository
 
-    def execute(self, user_id: UserId, current_user: User) -> User:
+    async def execute(self, user_id: UserId, current_user: User) -> User:
         """Return the requested user when access is allowed."""
         if user_id != current_user.id and not current_user.is_superuser:
             raise UserAccessDeniedError
 
-        user = self.user_repository.find_by_id(user_id)
+        user = await self.user_repository.find_by_id(user_id)
         if user is None:
             raise UserNotFoundError
         return user

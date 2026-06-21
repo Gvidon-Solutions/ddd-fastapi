@@ -13,7 +13,7 @@ class FindItemByIdUseCase(ABC):
     """Define the application boundary for retrieving one item."""
 
     @abstractmethod
-    def execute(self, current_user: User, item_id: ItemId) -> Item:
+    async def execute(self, current_user: User, item_id: ItemId) -> Item:
         """Return an item visible to the current user."""
 
 
@@ -24,9 +24,9 @@ class FindItemByIdUseCaseImpl(FindItemByIdUseCase):
         """Store use case dependencies."""
         self.item_repository = item_repository
 
-    def execute(self, current_user: User, item_id: ItemId) -> Item:
+    async def execute(self, current_user: User, item_id: ItemId) -> Item:
         """Return an item when it exists and access is allowed."""
-        item = self.item_repository.find_by_id(item_id)
+        item = await self.item_repository.find_by_id(item_id)
         if item is None:
             raise ItemNotFoundError
         if not current_user.is_superuser and not item.is_owned_by(current_user.id):

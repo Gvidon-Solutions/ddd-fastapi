@@ -12,7 +12,7 @@ class CreateItemUseCase(ABC):
     """Define the application boundary for item creation."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         current_user: User,
         title: ItemTitle,
@@ -28,7 +28,7 @@ class CreateItemUseCaseImpl(CreateItemUseCase):
         """Store use case dependencies."""
         self.item_repository = item_repository
 
-    def execute(
+    async def execute(
         self,
         current_user: User,
         title: ItemTitle,
@@ -40,7 +40,7 @@ class CreateItemUseCaseImpl(CreateItemUseCase):
             title=title,
             description=description,
         )
-        self.item_repository.save(item)
+        await self.item_repository.save(item)
         return item
 
 

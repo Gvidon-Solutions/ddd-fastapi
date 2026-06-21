@@ -3,6 +3,9 @@
 This backend keeps the public API shape of the FastAPI full-stack template while
 moving implementation details into DDD-oriented layers.
 
+Runtime code is async-first: routes call async use cases, repositories expose
+async ports, and SQLModel runs through `AsyncSession`.
+
 ## Layers
 
 - `app/domain`: framework-free domain model.
@@ -15,7 +18,7 @@ moving implementation details into DDD-oriented layers.
 ```bash
 uv run --project backend ruff check backend/app backend/tests
 uv run --project backend ruff format --check backend/app backend/tests
-uv run --project backend mypy backend/app
+uv run --project backend ty check backend/app
 uv run --project backend pytest
 ```
 
@@ -26,7 +29,7 @@ Tests are organized by layer:
 - `tests/domain`
 - `tests/usecase`
 - `tests/infrastructure`
-- `tests/integration`
+- `tests/presentation`
 
-Infrastructure tests use an in-memory SQLite database and do not require the
-configured PostgreSQL service.
+Infrastructure tests use an async in-memory SQLite database and do not require
+the configured PostgreSQL service.

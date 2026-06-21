@@ -13,7 +13,7 @@ class UpdateItemUseCase(ABC):
     """Define the application boundary for item updates."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         current_user: User,
         item_id: ItemId,
@@ -30,7 +30,7 @@ class UpdateItemUseCaseImpl(UpdateItemUseCase):
         """Store use case dependencies."""
         self.item_repository = item_repository
 
-    def execute(
+    async def execute(
         self,
         current_user: User,
         item_id: ItemId,
@@ -38,14 +38,14 @@ class UpdateItemUseCaseImpl(UpdateItemUseCase):
         description: ItemDescription | None = None,
     ) -> Item:
         """Update and persist an item."""
-        item = self.item_repository.find_by_id(item_id)
+        item = await self.item_repository.find_by_id(item_id)
         if item is None:
             raise ItemNotFoundError
         if not current_user.is_superuser and not item.is_owned_by(current_user.id):
             raise ItemAccessDeniedError
 
         item.update_content(title=title or item.title, description=description)
-        self.item_repository.save(item)
+        await self.item_repository.save(item)
         return item
 
 

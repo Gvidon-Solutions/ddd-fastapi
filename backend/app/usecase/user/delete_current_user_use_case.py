@@ -10,7 +10,7 @@ class DeleteCurrentUserUseCase(ABC):
     """Define the application boundary for current-user deletion."""
 
     @abstractmethod
-    def execute(self, current_user: User) -> None:
+    async def execute(self, current_user: User) -> None:
         """Delete the current user."""
 
 
@@ -21,10 +21,10 @@ class DeleteCurrentUserUseCaseImpl(DeleteCurrentUserUseCase):
         """Store use case dependencies."""
         self.user_repository = user_repository
 
-    def execute(self, current_user: User) -> None:
+    async def execute(self, current_user: User) -> None:
         """Delete the current user when domain rules allow it."""
         current_user.ensure_can_delete_self()
-        self.user_repository.delete(current_user.id)
+        await self.user_repository.delete(current_user.id)
 
 
 def new_delete_current_user_use_case(

@@ -20,7 +20,7 @@ class FindUsersUseCase(ABC):
     """Define the application boundary for listing users."""
 
     @abstractmethod
-    def execute(
+    async def execute(
         self,
         current_user: User,
         offset: int = 0,
@@ -36,7 +36,7 @@ class FindUsersUseCaseImpl(FindUsersUseCase):
         """Store use case dependencies."""
         self.user_repository = user_repository
 
-    def execute(
+    async def execute(
         self,
         current_user: User,
         offset: int = 0,
@@ -47,8 +47,8 @@ class FindUsersUseCaseImpl(FindUsersUseCase):
             raise UserAccessDeniedError
 
         return FindUsersResult(
-            data=self.user_repository.find_all(offset=offset, limit=limit),
-            count=self.user_repository.count(),
+            data=await self.user_repository.find_all(offset=offset, limit=limit),
+            count=await self.user_repository.count(),
         )
 
 

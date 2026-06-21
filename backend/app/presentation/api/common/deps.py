@@ -29,7 +29,7 @@ reusable_oauth2 = OAuth2PasswordBearer(
 TokenDep = Annotated[str, Depends(reusable_oauth2)]
 
 
-def get_current_user(
+async def get_current_user(
     user_repository: Annotated[UserRepository, Depends(get_user_repository)],
     token: TokenDep,
 ) -> User:
@@ -50,7 +50,7 @@ def get_current_user(
             detail="Could not validate credentials",
         )
 
-    user = user_repository.find_by_id(user_id)
+    user = await user_repository.find_by_id(user_id)
     if user is None:
         raise HTTPException(status_code=404, detail=UserNotFoundError.message)
     if not user.is_active:
@@ -61,7 +61,7 @@ def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-def get_current_active_superuser(current_user: CurrentUser) -> User:
+async def get_current_active_superuser(current_user: CurrentUser) -> User:
     """Return the current user when it has admin privileges."""
     if not current_user.is_superuser:
         raise HTTPException(

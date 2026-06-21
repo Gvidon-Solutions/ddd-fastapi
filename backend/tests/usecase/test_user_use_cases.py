@@ -2,6 +2,7 @@
 
 import pytest
 
+from app.domain.user.entities import User
 from app.domain.user.exceptions import (
     EmailAlreadyExistsError,
     InactiveUserError,
@@ -27,115 +28,238 @@ from app.usecase.user import (
 )
 from tests.usecase.fakes import FakePasswordHasher, InMemoryUserRepository
 
+pytestmark = pytest.mark.anyio
 
-def test_create_user_hashes_password_and_checks_duplicates() -> None:
+
+async def test_create_user_hashes_password() -> None:
+    # Arrange
     repository = InMemoryUserRepository()
     use_case = new_create_user_use_case(repository, FakePasswordHasher())
 
-    user = use_case.execute(EmailAddress("new@example.com"), "secret")
+    # Act
+    user = await use_case.execute(EmailAddress("new@example.com"), "secret")
 
+    # Assert
     assert user.hashed_password == PasswordHash("hashed:secret")
-    assert repository.find_by_email(EmailAddress("new@example.com")) == user
 
+
+async def test_create_user_persists_user() -> None:
+    # Arrange
+    repository = InMemoryUserRepository()
+    use_case = new_create_user_use_case(repository, FakePasswordHasher())
+
+    # Act
+    user = await use_case.execute(EmailAddress("new@example.com"), "secret")
+
+    # Assert
+    assert await repository.find_by_email(EmailAddress("new@example.com")) == user
+
+
+async def test_create_user_rejects_duplicate_email() -> None:
+    # Arrange
+    repository = InMemoryUserRepository()
+    use_case = new_create_user_use_case(repository, FakePasswordHasher())
+    await use_case.execute(EmailAddress("new@example.com"), "secret")
+
+    # Act / Assert
     with pytest.raises(EmailAlreadyExistsError):
-        use_case.execute(EmailAddress("new@example.com"), "secret")
+        await use_case.execute(EmailAddress("new@example.com"), "secret")
 
 
-def test_register_user_creates_regular_user() -> None:
+async def test_register_user_creates_regular_user() -> None:
+    # Arrange
     repository = InMemoryUserRepository()
     use_case = new_register_user_use_case(repository, FakePasswordHasher())
 
-    user = use_case.execute(EmailAddress("new@example.com"), "secret")
+    # Act
+    user = await use_case.execute(EmailAddress("new@example.com"), "secret")
 
+    # Assert
     assert not user.is_superuser
 
 
-def test_authenticate_user_verifies_password_and_updates_hash(user) -> None:  # type: ignore[no-untyped-def]
+async def test_authenticate_user_returns_user(user: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([user])
+    use_case = new_authenticate_user_use_case(repository, FakePasswordHasher())
+
+    # Act
+    result = await use_case.execute(user.email, "secret")
+
+    # Assert
+    assert result == user
+
+
+async def test_authenticate_user_persists_upgraded_password_hash(user: User) -> None:
+    # Arrange
     repository = InMemoryUserRepository([user])
     use_case = new_authenticate_user_use_case(
         repository,
         FakePasswordHasher(updated_hash=PasswordHash("upgraded")),
     )
 
-    result = use_case.execute(user.email, "secret")
+    # Act
+    await use_case.execute(user.email, "secret")
 
-    assert result == user
-    assert repository.find_by_id(user.id).hashed_password == PasswordHash("upgraded")  # type: ignore[union-attr]
+    # Assert
+    persisted_user = await repository.find_by_id(user.id)
+    assert persisted_user is not None
+    assert persisted_user.hashed_password == PasswordHash("upgraded")
 
 
-def test_authenticate_user_rejects_invalid_or_inactive_user(user) -> None:  # type: ignore[no-untyped-def]
+async def test_authenticate_user_rejects_invalid_credentials(user: User) -> None:
+    # Arrange
     repository = InMemoryUserRepository([user])
+    use_case = new_authenticate_user_use_case(
+        repository,
+        FakePasswordHasher(verified=False),
+    )
 
+    # Act / Assert
     with pytest.raises(InvalidCredentialsError):
-        new_authenticate_user_use_case(repository, FakePasswordHasher(False)).execute(
-            user.email,
-            "bad",
-        )
+        await use_case.execute(user.email, "bad")
 
+
+async def test_authenticate_user_rejects_inactive_user(user: User) -> None:
+    # Arrange
     user.deactivate()
+    repository = InMemoryUserRepository([user])
+    use_case = new_authenticate_user_use_case(repository, FakePasswordHasher())
+
+    # Act / Assert
     with pytest.raises(InactiveUserError):
-        new_authenticate_user_use_case(repository, FakePasswordHasher()).execute(
-            user.email,
-            "secret",
-        )
+        await use_case.execute(user.email, "secret")
 
 
-def test_find_users_requires_admin(user, admin) -> None:  # type: ignore[no-untyped-def]
+async def test_find_users_returns_users_for_admin(user: User, admin: User) -> None:
+    # Arrange
     repository = InMemoryUserRepository([user, admin])
     use_case = new_find_users_use_case(repository)
 
-    result = use_case.execute(admin)
+    # Act
+    result = await use_case.execute(admin)
 
+    # Assert
     assert result.count == 2
+    assert result.data == [user, admin]
+
+
+async def test_find_users_rejects_regular_user(user: User, admin: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([user, admin])
+    use_case = new_find_users_use_case(repository)
+
+    # Act / Assert
     with pytest.raises(UserAccessDeniedError):
-        use_case.execute(user)
+        await use_case.execute(user)
 
 
-def test_find_user_by_id_enforces_visibility(user, admin) -> None:  # type: ignore[no-untyped-def]
+async def test_find_user_by_id_returns_current_user(user: User, admin: User) -> None:
+    # Arrange
     repository = InMemoryUserRepository([user, admin])
     use_case = new_find_user_by_id_use_case(repository)
 
-    assert use_case.execute(user.id, user) == user
-    assert use_case.execute(user.id, admin) == user
+    # Act
+    result = await use_case.execute(user.id, user)
 
+    # Assert
+    assert result == user
+
+
+async def test_find_user_by_id_allows_admin(user: User, admin: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([user, admin])
+    use_case = new_find_user_by_id_use_case(repository)
+
+    # Act
+    result = await use_case.execute(user.id, admin)
+
+    # Assert
+    assert result == user
+
+
+async def test_find_user_by_id_rejects_other_regular_user(
+    user: User, admin: User
+) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([user, admin])
+    use_case = new_find_user_by_id_use_case(repository)
+
+    # Act / Assert
     with pytest.raises(UserAccessDeniedError):
-        use_case.execute(admin.id, user)
+        await use_case.execute(admin.id, user)
+
+
+async def test_find_user_by_id_raises_not_found(admin: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([admin])
+    use_case = new_find_user_by_id_use_case(repository)
+
+    # Act / Assert
     with pytest.raises(UserNotFoundError):
-        use_case.execute(UserId.generate(), admin)
+        await use_case.execute(UserId.generate(), admin)
 
 
-def test_update_current_user_checks_duplicate_email(user, admin) -> None:  # type: ignore[no-untyped-def]
+async def test_update_current_user_updates_full_name(user: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([user])
+    use_case = new_update_current_user_use_case(repository)
+
+    # Act
+    updated = await use_case.execute(user, full_name=FullName("Updated"))
+
+    # Assert
+    assert updated.full_name == FullName("Updated")
+
+
+async def test_update_current_user_rejects_duplicate_email(
+    user: User,
+    admin: User,
+) -> None:
+    # Arrange
     repository = InMemoryUserRepository([user, admin])
     use_case = new_update_current_user_use_case(repository)
 
-    updated = use_case.execute(user, full_name=FullName("Updated"))
-
-    assert updated.full_name == FullName("Updated")
+    # Act / Assert
     with pytest.raises(EmailAlreadyExistsError):
-        use_case.execute(user, email=admin.email)
+        await use_case.execute(user, email=admin.email)
 
 
-def test_update_current_user_password_checks_current_and_reuse(user) -> None:  # type: ignore[no-untyped-def]
+async def test_update_current_user_password_rejects_reused_password(user: User) -> None:
+    # Arrange
     repository = InMemoryUserRepository([user])
+    use_case = new_update_current_user_password_use_case(
+        repository,
+        FakePasswordHasher(),
+    )
 
+    # Act / Assert
     with pytest.raises(PasswordReuseError):
-        new_update_current_user_password_use_case(
-            repository,
-            FakePasswordHasher(),
-        ).execute(user, "same", "same")
+        await use_case.execute(user, "same", "same")
 
+
+async def test_update_current_user_password_rejects_incorrect_current_password(
+    user: User,
+) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([user])
+    use_case = new_update_current_user_password_use_case(
+        repository,
+        FakePasswordHasher(verified=False),
+    )
+
+    # Act / Assert
     with pytest.raises(IncorrectPasswordError):
-        new_update_current_user_password_use_case(
-            repository,
-            FakePasswordHasher(False),
-        ).execute(user, "old", "new")
+        await use_case.execute(user, "old", "new")
 
 
-def test_update_user_requires_admin_and_updates_fields(user, admin) -> None:  # type: ignore[no-untyped-def]
+async def test_update_user_updates_fields(user: User, admin: User) -> None:
+    # Arrange
     repository = InMemoryUserRepository([user, admin])
     use_case = new_update_user_use_case(repository, FakePasswordHasher())
 
-    updated = use_case.execute(
+    # Act
+    updated = await use_case.execute(
         admin,
         user.id,
         email=EmailAddress("updated@example.com"),
@@ -144,26 +268,61 @@ def test_update_user_requires_admin_and_updates_fields(user, admin) -> None:  # 
         is_superuser=True,
     )
 
+    # Assert
     assert updated.email == EmailAddress("updated@example.com")
     assert updated.hashed_password == PasswordHash("hashed:secret")
     assert not updated.is_active
     assert updated.is_superuser
 
+
+async def test_update_user_rejects_regular_user(user: User, admin: User) -> None:
+    # Arrange
     user.revoke_superuser()
-    with pytest.raises(UserAccessDeniedError):
-        use_case.execute(user, admin.id)
-    with pytest.raises(UserNotFoundError):
-        use_case.execute(admin, UserId.generate())
-
-
-def test_delete_user_and_current_user_rules(user, admin) -> None:  # type: ignore[no-untyped-def]
     repository = InMemoryUserRepository([user, admin])
+    use_case = new_update_user_use_case(repository, FakePasswordHasher())
 
+    # Act / Assert
+    with pytest.raises(UserAccessDeniedError):
+        await use_case.execute(user, admin.id)
+
+
+async def test_update_user_raises_not_found(admin: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([admin])
+    use_case = new_update_user_use_case(repository, FakePasswordHasher())
+
+    # Act / Assert
+    with pytest.raises(UserNotFoundError):
+        await use_case.execute(admin, UserId.generate())
+
+
+async def test_delete_user_rejects_admin_self_delete(admin: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([admin])
+    use_case = new_delete_user_use_case(repository)
+
+    # Act / Assert
     with pytest.raises(SuperuserSelfDeletionError):
-        new_delete_user_use_case(repository).execute(admin, admin.id)
+        await use_case.execute(admin, admin.id)
 
-    new_delete_user_use_case(repository).execute(admin, user.id)
-    assert repository.find_by_id(user.id) is None
 
+async def test_delete_user_removes_user(user: User, admin: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([user, admin])
+    use_case = new_delete_user_use_case(repository)
+
+    # Act
+    await use_case.execute(admin, user.id)
+
+    # Assert
+    assert await repository.find_by_id(user.id) is None
+
+
+async def test_delete_current_user_rejects_admin(admin: User) -> None:
+    # Arrange
+    repository = InMemoryUserRepository([admin])
+    use_case = new_delete_current_user_use_case(repository)
+
+    # Act / Assert
     with pytest.raises(SuperuserSelfDeletionError):
-        new_delete_current_user_use_case(repository).execute(admin)
+        await use_case.execute(admin)

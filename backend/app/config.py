@@ -2,6 +2,7 @@
 
 import secrets
 import warnings
+from pathlib import Path
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -14,6 +15,8 @@ from pydantic import (
     model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+REPO_ROOT = Path(__file__).parent.parent.parent
 
 
 def parse_cors(v: Any) -> list[str] | str:
@@ -29,7 +32,7 @@ class Settings(BaseSettings):
     """Runtime settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file="../.env",
+        env_file=REPO_ROOT / "envs" / "example.env",
         env_ignore_empty=True,
         extra="ignore",
     )
@@ -79,7 +82,7 @@ class Settings(BaseSettings):
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
         """Build the SQLAlchemy database URI."""
         return PostgresDsn.build(
-            scheme="postgresql+psycopg",
+            scheme="postgresql+asyncpg",
             username=self.POSTGRES_USER,
             password=self.POSTGRES_PASSWORD,
             host=self.POSTGRES_SERVER,
