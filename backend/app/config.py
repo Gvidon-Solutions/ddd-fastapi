@@ -70,29 +70,27 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_PASSWORD: str = "changethis"
 
     REDIS_URL: str = "redis://localhost:6379/0"
-    TASKIQ_QUEUE_NAME: str = "skills-dddpy-tasks"
-    TASKIQ_CONSUMER_GROUP_NAME: str = "skills-dddpy-workers"
-    TASKIQ_QUEUE_MAXLEN: int = 10_000
-    TASKIQ_RESULT_TTL_SECONDS: int = 60 * 60
-    AGENT_EVENTS_STREAM: str = "agent-run-events"
-    AGENT_EVENTS_STREAM_MAXLEN: int = 10_000
-    AGENT_WORKFLOW_MAX_TURNS: int = 10
+    ARQ_QUEUE_NAME: str = "skills-dddpy-tasks"
+    ARQ_JOB_TIMEOUT_SECONDS: int = 60 * 60
+    ARQ_RESULT_TTL_SECONDS: int = 60 * 60
 
-    CODEX_WORKFLOW_ENABLED: bool = False
-    CODEX_WORKFLOW_MODEL: str = "gpt-5.5"
-    CODEX_WORKFLOW_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh"] = "low"
-    CODEX_WORKFLOW_WORKING_DIRECTORY: str = str(REPO_ROOT)
-    CODEX_WORKFLOW_SANDBOX_MODE: Literal[
+    CODEX_JOB_MODEL: str = "gpt-5.5"
+    CODEX_JOB_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh"] = "low"
+    CODEX_JOB_WORKING_DIRECTORY: str = str(REPO_ROOT)
+    CODEX_JOB_SANDBOX_MODE: Literal[
         "read-only",
         "workspace-write",
         "danger-full-access",
     ] = "workspace-write"
-    CODEX_WORKFLOW_APPROVAL_POLICY: Literal[
+    CODEX_JOB_APPROVAL_POLICY: Literal[
         "untrusted",
         "on-request",
         "never",
     ] = "never"
-    CODEX_WORKFLOW_IDLE_TIMEOUT_SECONDS: int = 60
+    CODEX_JOB_IDLE_TIMEOUT_SECONDS: int = 60
+    CODEX_JOB_MAX_TURNS: int = 10
+    CODEX_JOB_EVENTS_STREAM: str = "codex-job-events"
+    CODEX_JOB_EVENTS_STREAM_MAXLEN: int = 10_000
     CODEX_CLI_PATH: str = "codex"
     CODEX_DEVICE_LOGIN_START_TIMEOUT_SECONDS: float = 10.0
 

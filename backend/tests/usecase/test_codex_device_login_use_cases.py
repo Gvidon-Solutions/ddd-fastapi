@@ -4,9 +4,9 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.domain.agent.entities import CodexDeviceLoginSession, CodexLoginStatus
-from app.domain.agent.value_objects import CodexDeviceLoginStatus
-from app.usecase.agent import (
+from app.domain.codex_auth.entities import CodexDeviceLoginSession, CodexLoginStatus
+from app.domain.codex_auth.value_objects import CodexDeviceLoginStatus
+from app.usecase.codex_auth import (
     new_cancel_codex_device_login_use_case,
     new_find_codex_device_login_use_case,
     new_get_codex_login_status_use_case,

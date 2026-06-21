@@ -7,16 +7,17 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
-from app.domain.agent.repositories import AgentRunRepository
+from app.domain.codex_job.repositories import CodexJobRepository
 from app.domain.item.repositories import ItemRepository
 from app.domain.user.repositories import UserRepository
 from app.infrastructure.codex import codex_device_login_manager
 from app.infrastructure.security import new_password_hasher
-from app.infrastructure.sqlmodel.agent import new_agent_run_repository
+from app.infrastructure.sqlmodel.codex_job import new_codex_job_repository
 from app.infrastructure.sqlmodel.item import new_item_repository
 from app.infrastructure.sqlmodel.user import new_user_repository
-from app.usecase.agent import (
+from app.usecase.codex_auth import (
     CancelCodexDeviceLoginUseCase,
+    CodexDeviceLoginGateway,
     FindCodexDeviceLoginUseCase,
     GetCodexLoginStatusUseCase,
     StartCodexDeviceLoginUseCase,
@@ -25,7 +26,15 @@ from app.usecase.agent import (
     new_get_codex_login_status_use_case,
     new_start_codex_device_login_use_case,
 )
-from app.usecase.agent.ports import CodexDeviceLoginGateway
+from app.usecase.codex_job import (
+    AbortCodexJobUseCase,
+    CodexJobStarter,
+    EnqueueCodexJobUseCase,
+    GetStatusCodexJobUseCase,
+    new_abort_codex_job_use_case,
+    new_enqueue_codex_job_use_case,
+    new_get_status_codex_job_use_case,
+)
 from app.usecase.item import (
     CreateItemUseCase,
     DeleteItemUseCase,
@@ -90,16 +99,23 @@ def get_user_repository(
     return new_user_repository(session)
 
 
-def get_agent_run_repository(
+def get_codex_job_repository(
     session: AsyncSession = Depends(get_session),
-) -> AgentRunRepository:
-    """Provide an agent run repository."""
-    return new_agent_run_repository(session)
+) -> CodexJobRepository:
+    """Provide a Codex job repository."""
+    return new_codex_job_repository(session)
 
 
 def get_codex_device_login_gateway() -> CodexDeviceLoginGateway:
     """Provide the Codex device login gateway."""
     return codex_device_login_manager
+
+
+def get_codex_job_starter() -> CodexJobStarter:
+    """Provide the Codex job starter."""
+    from app.infrastructure.arq import new_codex_job_starter
+
+    return new_codex_job_starter()
 
 
 def get_password_hasher() -> PasswordHasher:
@@ -120,6 +136,29 @@ def get_codex_login_status_use_case(
 ) -> GetCodexLoginStatusUseCase:
     """Provide the Codex login status use case."""
     return new_get_codex_login_status_use_case(gateway)
+
+
+def get_enqueue_codex_job_use_case(
+    repository: CodexJobRepository = Depends(get_codex_job_repository),
+    starter: CodexJobStarter = Depends(get_codex_job_starter),
+) -> EnqueueCodexJobUseCase:
+    """Provide the enqueue Codex job use case."""
+    return new_enqueue_codex_job_use_case(repository, starter)
+
+
+def get_codex_job_status_use_case(
+    repository: CodexJobRepository = Depends(get_codex_job_repository),
+) -> GetStatusCodexJobUseCase:
+    """Provide the get Codex job status use case."""
+    return new_get_status_codex_job_use_case(repository)
+
+
+def get_abort_codex_job_use_case(
+    repository: CodexJobRepository = Depends(get_codex_job_repository),
+    starter: CodexJobStarter = Depends(get_codex_job_starter),
+) -> AbortCodexJobUseCase:
+    """Provide the abort Codex job use case."""
+    return new_abort_codex_job_use_case(repository, starter)
 
 
 def get_start_codex_device_login_use_case(

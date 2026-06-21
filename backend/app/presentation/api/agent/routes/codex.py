@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.domain.agent.entities import CodexDeviceLoginSession
+from app.domain.codex_auth.entities import CodexDeviceLoginSession
 from app.domain.user.entities import User
 from app.infrastructure.di import (
     get_cancel_codex_device_login_use_case,
@@ -15,7 +15,7 @@ from app.infrastructure.di import (
 )
 from app.presentation.api.agent.schemas import CodexDeviceLogin, CodexLoginStatus
 from app.presentation.api.common.deps import get_current_active_superuser
-from app.usecase.agent import (
+from app.usecase.codex_auth import (
     CancelCodexDeviceLoginUseCase,
     FindCodexDeviceLoginUseCase,
     GetCodexLoginStatusUseCase,

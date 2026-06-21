@@ -8,9 +8,9 @@ import uuid
 from uuid import UUID
 
 from app.config import settings
-from app.domain.agent.entities import CodexDeviceLoginSession, CodexLoginStatus
-from app.domain.agent.value_objects import CodexDeviceLoginStatus
-from app.usecase.agent.ports import CodexDeviceLoginGateway
+from app.domain.codex_auth.entities import CodexDeviceLoginSession, CodexLoginStatus
+from app.domain.codex_auth.value_objects import CodexDeviceLoginStatus
+from app.usecase.codex_auth.ports import CodexDeviceLoginGateway
 
 _URL_PATTERN = re.compile(r"https://[^\s]+")
 _CODE_PATTERNS = (
