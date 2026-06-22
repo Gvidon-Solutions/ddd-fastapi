@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  arq:
+    image: skills-dddpy-arq:local
+    build:
+      context: .
+      dockerfile: backend/arq.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - envs/example.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_SERVER: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      CODEX_JOB_SANDBOX_MODE: danger-full-access
+      CODEX_JOB_WORKING_DIRECTORY: /opt/backend/app/infrastructure/arq/codex_workspace
+      CODEX_CLI_PATH: codex
+    volumes:
+      - ./backend/app/infrastructure/arq/codex_workspace/.codex/auth.json:/opt/backend/app/infrastructure/arq/codex_workspace/.codex/auth.json:ro
+      - ./backend/app/infrastructure/arq/codex_workspace/.codex/config.toml:/opt/backend/app/infrastructure/arq/codex_workspace/.codex/config.toml:ro
+
+volumes:
+  postgres-data:
+  redis-data:

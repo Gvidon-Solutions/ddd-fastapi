@@ -10,7 +10,7 @@ from app.config import settings
 from app.domain.codex_job.repositories import CodexJobRepository
 from app.domain.item.repositories import ItemRepository
 from app.domain.user.repositories import UserRepository
-from app.infrastructure.codex import codex_device_login_manager
+from app.infrastructure.codex_auth import codex_device_login_manager
 from app.infrastructure.security import new_password_hasher
 from app.infrastructure.sqlmodel.codex_job import new_codex_job_repository
 from app.infrastructure.sqlmodel.item import new_item_repository

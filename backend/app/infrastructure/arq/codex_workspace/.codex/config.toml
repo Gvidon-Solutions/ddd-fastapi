@@ -1,0 +1,10 @@
+model = "gpt-5.5"
+model_reasoning_effort = "low"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[projects."/opt/backend/app/infrastructure/arq/codex_workspace"]
+trust_level = "trusted"
+
+[features]
+use_linux_sandbox_bwrap = false

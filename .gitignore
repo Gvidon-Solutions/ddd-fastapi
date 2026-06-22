@@ -36,6 +36,11 @@ pip-wheel-metadata/
 *.pem
 *.key
 *.crt
+backend/app/infrastructure/arq/codex_workspace/*
+!backend/app/infrastructure/arq/codex_workspace/.gitkeep
+!backend/app/infrastructure/arq/codex_workspace/.codex/
+backend/app/infrastructure/arq/codex_workspace/.codex/*
+!backend/app/infrastructure/arq/codex_workspace/.codex/config.toml
 
 # Logs and runtime files
 *.log

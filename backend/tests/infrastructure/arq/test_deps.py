@@ -3,8 +3,8 @@
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.infrastructure.arq.codex_job_runner import new_codex_job_runner
 from app.infrastructure.arq.deps import CodexJobWorkerDependencies
-from app.infrastructure.codex import new_codex_job_runner
 from app.infrastructure.sqlmodel.codex_job import new_codex_job_repository
 from app.infrastructure.sqlmodel.codex_job.codex_job_repository import (
     CodexJobRepositoryImpl,

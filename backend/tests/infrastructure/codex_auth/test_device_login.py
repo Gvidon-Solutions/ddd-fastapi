@@ -1,6 +1,6 @@
 """Codex device login infrastructure tests."""
 
-from app.infrastructure.codex import parse_device_login_output
+from app.infrastructure.codex_auth import parse_device_login_output
 
 
 def test_parse_device_login_output_extracts_url_and_code() -> None:
