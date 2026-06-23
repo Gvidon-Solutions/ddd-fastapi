@@ -26,16 +26,18 @@ RUN uv sync --frozen --no-dev --no-install-project --project /opt/backend
 
 COPY backend/app/__init__.py backend/app/config.py app/
 COPY backend/app/domain/__init__.py app/domain/
-COPY backend/app/domain/codex_job app/domain/codex_job
+COPY backend/app/domain/job app/domain/job
 COPY backend/app/usecase/__init__.py app/usecase/
-COPY backend/app/usecase/codex_job app/usecase/codex_job
+COPY backend/app/usecase/job app/usecase/job
 COPY backend/app/infrastructure/__init__.py app/infrastructure/
-COPY backend/app/infrastructure/arq/__init__.py backend/app/infrastructure/arq/codex_job_queue.py backend/app/infrastructure/arq/codex_job_runner.py backend/app/infrastructure/arq/deps.py backend/app/infrastructure/arq/settings.py backend/app/infrastructure/arq/worker.py app/infrastructure/arq/
+COPY backend/app/infrastructure/arq/__init__.py backend/app/infrastructure/arq/job_queue.py backend/app/infrastructure/arq/settings.py backend/app/infrastructure/arq/worker.py app/infrastructure/arq/
+COPY backend/app/infrastructure/arq/jobs app/infrastructure/arq/jobs
 COPY backend/app/infrastructure/arq/codex_workspace/.gitkeep app/infrastructure/arq/codex_workspace/.gitkeep
 COPY backend/app/infrastructure/arq/codex_workspace/.codex/config.toml app/infrastructure/arq/codex_workspace/.codex/config.toml
-COPY backend/app/infrastructure/redis app/infrastructure/redis
+COPY backend/app/infrastructure/artifact_storage app/infrastructure/artifact_storage
+COPY backend/app/infrastructure/clock app/infrastructure/clock
 COPY backend/app/infrastructure/sqlmodel/__init__.py backend/app/infrastructure/sqlmodel/datetime.py app/infrastructure/sqlmodel/
-COPY backend/app/infrastructure/sqlmodel/codex_job app/infrastructure/sqlmodel/codex_job
+COPY backend/app/infrastructure/sqlmodel/job app/infrastructure/sqlmodel/job
 
 RUN mkdir -p "${CODEX_WORKSPACE}/.codex"
 

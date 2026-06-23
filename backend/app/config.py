@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     ARQ_QUEUE_NAME: str = "skills-dddpy-tasks"
     ARQ_JOB_TIMEOUT_SECONDS: int = 60 * 60
     ARQ_RESULT_TTL_SECONDS: int = 60 * 60
+    JOB_ARTIFACT_STORAGE_DIRECTORY: str = str(
+        REPO_ROOT / "backend" / "app" / "infrastructure" / "artifact_storage" / "files"
+    )
 
     CODEX_JOB_MODEL: str = "gpt-5.5"
     CODEX_JOB_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh"] = "low"

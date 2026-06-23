@@ -26,6 +26,29 @@ services:
       timeout: 5s
       retries: 10
 
+  fastapi:
+    image: skills-dddpy-fastapi:local
+    build:
+      context: .
+      dockerfile: backend/fastapi.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - envs/example.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_SERVER: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      - "${FASTAPI_PORT:-8000}:8000"
+
   arq:
     image: skills-dddpy-arq:local
     build:

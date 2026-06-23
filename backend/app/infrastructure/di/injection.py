@@ -7,34 +7,20 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
-from app.domain.codex_job.repositories import CodexJobRepository
 from app.domain.item.repositories import ItemRepository
+from app.domain.job import JobArtifactRepository, JobEventRepository, JobRepository
 from app.domain.user.repositories import UserRepository
-from app.infrastructure.codex_auth import codex_device_login_manager
+from app.infrastructure.arq import new_arq_job_queue
+from app.infrastructure.artifact_storage import new_filesystem_artifact_storage
+from app.infrastructure.clock import new_system_clock
 from app.infrastructure.security import new_password_hasher
-from app.infrastructure.sqlmodel.codex_job import new_codex_job_repository
 from app.infrastructure.sqlmodel.item import new_item_repository
+from app.infrastructure.sqlmodel.job import (
+    new_job_artifact_repository,
+    new_job_event_repository,
+    new_job_repository,
+)
 from app.infrastructure.sqlmodel.user import new_user_repository
-from app.usecase.codex_auth import (
-    CancelCodexDeviceLoginUseCase,
-    CodexDeviceLoginGateway,
-    FindCodexDeviceLoginUseCase,
-    GetCodexLoginStatusUseCase,
-    StartCodexDeviceLoginUseCase,
-    new_cancel_codex_device_login_use_case,
-    new_find_codex_device_login_use_case,
-    new_get_codex_login_status_use_case,
-    new_start_codex_device_login_use_case,
-)
-from app.usecase.codex_job import (
-    AbortCodexJobUseCase,
-    CodexJobStarter,
-    EnqueueCodexJobUseCase,
-    GetStatusCodexJobUseCase,
-    new_abort_codex_job_use_case,
-    new_enqueue_codex_job_use_case,
-    new_get_status_codex_job_use_case,
-)
 from app.usecase.item import (
     CreateItemUseCase,
     DeleteItemUseCase,
@@ -46,6 +32,13 @@ from app.usecase.item import (
     new_find_item_by_id_use_case,
     new_find_items_use_case,
     new_update_item_use_case,
+)
+from app.usecase.job import (
+    ArtifactStorage,
+    Clock,
+    JobQueue,
+    LaunchJobUseCase,
+    new_launch_job_use_case,
 )
 from app.usecase.user import (
     AuthenticateUserUseCase,
@@ -99,23 +92,40 @@ def get_user_repository(
     return new_user_repository(session)
 
 
-def get_codex_job_repository(
+def get_job_repository(
     session: AsyncSession = Depends(get_session),
-) -> CodexJobRepository:
-    """Provide a Codex job repository."""
-    return new_codex_job_repository(session)
+) -> JobRepository:
+    """Provide a job repository."""
+    return new_job_repository(session)
 
 
-def get_codex_device_login_gateway() -> CodexDeviceLoginGateway:
-    """Provide the Codex device login gateway."""
-    return codex_device_login_manager
+def get_job_artifact_repository(
+    session: AsyncSession = Depends(get_session),
+) -> JobArtifactRepository:
+    """Provide a job artifact repository."""
+    return new_job_artifact_repository(session)
 
 
-def get_codex_job_starter() -> CodexJobStarter:
-    """Provide the Codex job starter."""
-    from app.infrastructure.arq import new_codex_job_starter
+def get_job_event_repository(
+    session: AsyncSession = Depends(get_session),
+) -> JobEventRepository:
+    """Provide a job event repository."""
+    return new_job_event_repository(session)
 
-    return new_codex_job_starter()
+
+def get_job_queue() -> JobQueue:
+    """Provide a job queue."""
+    return new_arq_job_queue()
+
+
+def get_artifact_storage() -> ArtifactStorage:
+    """Provide artifact storage."""
+    return new_filesystem_artifact_storage()
+
+
+def get_clock() -> Clock:
+    """Provide a clock."""
+    return new_system_clock()
 
 
 def get_password_hasher() -> PasswordHasher:
@@ -131,55 +141,17 @@ def get_authenticate_user_use_case(
     return new_authenticate_user_use_case(user_repository, password_hasher)
 
 
-def get_codex_login_status_use_case(
-    gateway: CodexDeviceLoginGateway = Depends(get_codex_device_login_gateway),
-) -> GetCodexLoginStatusUseCase:
-    """Provide the Codex login status use case."""
-    return new_get_codex_login_status_use_case(gateway)
-
-
-def get_enqueue_codex_job_use_case(
-    repository: CodexJobRepository = Depends(get_codex_job_repository),
-    starter: CodexJobStarter = Depends(get_codex_job_starter),
-) -> EnqueueCodexJobUseCase:
-    """Provide the enqueue Codex job use case."""
-    return new_enqueue_codex_job_use_case(repository, starter)
-
-
-def get_codex_job_status_use_case(
-    repository: CodexJobRepository = Depends(get_codex_job_repository),
-) -> GetStatusCodexJobUseCase:
-    """Provide the get Codex job status use case."""
-    return new_get_status_codex_job_use_case(repository)
-
-
-def get_abort_codex_job_use_case(
-    repository: CodexJobRepository = Depends(get_codex_job_repository),
-    starter: CodexJobStarter = Depends(get_codex_job_starter),
-) -> AbortCodexJobUseCase:
-    """Provide the abort Codex job use case."""
-    return new_abort_codex_job_use_case(repository, starter)
-
-
-def get_start_codex_device_login_use_case(
-    gateway: CodexDeviceLoginGateway = Depends(get_codex_device_login_gateway),
-) -> StartCodexDeviceLoginUseCase:
-    """Provide the start Codex device login use case."""
-    return new_start_codex_device_login_use_case(gateway)
-
-
-def get_find_codex_device_login_use_case(
-    gateway: CodexDeviceLoginGateway = Depends(get_codex_device_login_gateway),
-) -> FindCodexDeviceLoginUseCase:
-    """Provide the find Codex device login use case."""
-    return new_find_codex_device_login_use_case(gateway)
-
-
-def get_cancel_codex_device_login_use_case(
-    gateway: CodexDeviceLoginGateway = Depends(get_codex_device_login_gateway),
-) -> CancelCodexDeviceLoginUseCase:
-    """Provide the cancel Codex device login use case."""
-    return new_cancel_codex_device_login_use_case(gateway)
+def get_launch_job_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+    queue: JobQueue = Depends(get_job_queue),
+    clock: Clock = Depends(get_clock),
+) -> LaunchJobUseCase:
+    """Provide the launch-job use case."""
+    return new_launch_job_use_case(
+        jobs=jobs,
+        queue=queue,
+        clock=clock,
+    )
 
 
 def get_create_item_use_case(

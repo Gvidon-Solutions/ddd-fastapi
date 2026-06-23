@@ -2,4 +2,10 @@
 
 from __future__ import annotations
 
-__all__ = ("CodexJobDTO", "ItemDTO", "UserDTO")
+__all__ = (
+    "ItemDTO",
+    "JobArtifactDTO",
+    "JobDTO",
+    "JobEventDTO",
+    "UserDTO",
+)

@@ -1,0 +1,23 @@
+"""Define the artifact storage port."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+
+from app.domain.job import ArtifactLocation
+
+
+class ArtifactStorage(ABC):
+    """Store and read artifact payload bytes."""
+
+    @abstractmethod
+    async def write(
+        self,
+        content: bytes,
+        metadata: dict | None = None,
+    ) -> ArtifactLocation:
+        """Write bytes and return their storage location."""
+
+    @abstractmethod
+    async def read(self, location: ArtifactLocation) -> bytes:
+        """Read bytes from a storage location."""

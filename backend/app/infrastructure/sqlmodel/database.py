@@ -7,14 +7,16 @@ from app.config import settings
 from app.domain.user.value_objects import EmailAddress
 from app.infrastructure.di.injection import engine
 from app.infrastructure.security import new_password_hasher
-from app.infrastructure.sqlmodel.codex_job import CodexJobDTO
 from app.infrastructure.sqlmodel.item import ItemDTO
+from app.infrastructure.sqlmodel.job import JobArtifactDTO, JobDTO, JobEventDTO
 from app.infrastructure.sqlmodel.user import UserDTO, new_user_repository
 from app.usecase.user import new_create_user_use_case
 
 __all__ = (
-    "CodexJobDTO",
     "ItemDTO",
+    "JobArtifactDTO",
+    "JobDTO",
+    "JobEventDTO",
     "SQLModel",
     "UserDTO",
     "engine",

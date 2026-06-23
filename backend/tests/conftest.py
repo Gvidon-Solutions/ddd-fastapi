@@ -12,8 +12,8 @@ from app.domain.item.entities import Item
 from app.domain.item.value_objects import ItemDescription, ItemTitle
 from app.domain.user.entities import User
 from app.domain.user.value_objects import EmailAddress, FullName, PasswordHash
-from app.infrastructure.sqlmodel.codex_job import CodexJobDTO
 from app.infrastructure.sqlmodel.item import ItemDTO
+from app.infrastructure.sqlmodel.job import JobArtifactDTO, JobDTO, JobEventDTO
 from app.infrastructure.sqlmodel.user import UserDTO
 
 
@@ -66,7 +66,9 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
     # Import DTOs before create_all so relationship metadata is registered.
     assert UserDTO.__tablename__ == "user"
     assert ItemDTO.__tablename__ == "item"
-    assert CodexJobDTO.__tablename__ == "codex_job"
+    assert JobDTO.__tablename__ == "job"
+    assert JobArtifactDTO.__tablename__ == "job_artifact"
+    assert JobEventDTO.__tablename__ == "job_event"
     async with engine.begin() as connection:
         await connection.run_sync(SQLModel.metadata.create_all)
 
