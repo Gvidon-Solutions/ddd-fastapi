@@ -12,8 +12,9 @@ from sqlmodel import SQLModel
 
 from alembic import context
 from app.config import settings
-from app.infrastructure.sqlmodel.codex_job import CodexJobDTO  # noqa: F401
+from app.infrastructure.sqlmodel.event import EventDTO  # noqa: F401
 from app.infrastructure.sqlmodel.item import ItemDTO  # noqa: F401
+from app.infrastructure.sqlmodel.job import JobArtifactDTO, JobDTO  # noqa: F401
 from app.infrastructure.sqlmodel.user import UserDTO  # noqa: F401
 
 config = context.config

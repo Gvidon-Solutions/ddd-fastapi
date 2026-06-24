@@ -34,8 +34,12 @@ from app.usecase.item import (
 )
 from app.usecase.job import (
     ArtifactStorage,
+    CancelJobUseCase,
+    GetCodexAuthCodeAndUrlUseCase,
     JobQueue,
     LaunchJobUseCase,
+    new_cancel_job_use_case,
+    new_get_codex_auth_code_and_url_use_case,
     new_launch_job_use_case,
 )
 from app.usecase.user import (
@@ -140,6 +144,24 @@ def get_launch_job_use_case(
 ) -> LaunchJobUseCase:
     """Provide the launch-job use case."""
     return new_launch_job_use_case(
+        jobs=jobs,
+        queue=queue,
+    )
+
+
+def get_codex_auth_code_and_url_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+) -> GetCodexAuthCodeAndUrlUseCase:
+    """Provide the Codex auth code polling use case."""
+    return new_get_codex_auth_code_and_url_use_case(jobs=jobs)
+
+
+def get_cancel_job_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+    queue: JobQueue = Depends(get_job_queue),
+) -> CancelJobUseCase:
+    """Provide the cancel-job use case."""
+    return new_cancel_job_use_case(
         jobs=jobs,
         queue=queue,
     )

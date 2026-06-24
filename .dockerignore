@@ -7,3 +7,8 @@ __pycache__/
 .ruff_cache/
 
 backend/app/infrastructure/arq/codex_workspace/.codex/auth.json
+backend/app/infrastructure/arq/.codex_work_dir/.codex/auth.json
+backend/app/infrastructure/arq/.codex_work_dir/.codex/cache/
+backend/app/infrastructure/arq/.codex_work_dir/.codex/log/
+backend/app/infrastructure/arq/.codex_work_dir/.codex/*.sqlite
+backend/app/infrastructure/arq/.codex_work_dir/.codex/installation_id

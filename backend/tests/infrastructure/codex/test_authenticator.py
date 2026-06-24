@@ -14,3 +14,17 @@ def test_parse_device_login_output_extracts_url_and_device_code() -> None:
         "verification_url": "https://auth.openai.com/device",
         "device_code": "ABCD-EFGH",
     }
+
+
+def test_parse_device_login_output_ignores_ansi_and_plain_words() -> None:
+    # Act
+    parsed = parse_device_login_output(
+        "Open https://auth.openai.com/codex/device\x1b[0m "
+        "and follow the authorization code instructions",
+    )
+
+    # Assert
+    assert parsed == {
+        "verification_url": "https://auth.openai.com/codex/device",
+        "device_code": None,
+    }

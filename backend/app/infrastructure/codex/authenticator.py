@@ -12,6 +12,7 @@ from app.domain.job.codex_auth_job_use_case import CodexAuthResult, CodexDeviceA
 from app.usecase.job.codex import CodexAuthenticator
 
 _URL_PATTERN = re.compile(r"https://[^\s]+")
+_ANSI_PATTERN = re.compile(r"\x1b\[[0-9;]*m")
 _CODE_PATTERNS = (
     re.compile(r"\b([A-Z0-9]{4,}(?:-[A-Z0-9]{4,})+)\b"),
     re.compile(r"(?:code|user code|device code)[:\s]+([A-Z0-9-]{6,})", re.IGNORECASE),
@@ -95,11 +96,12 @@ class CodexCliAuthenticator(CodexAuthenticator):
 
 def parse_device_login_output(output: str) -> dict[str, str | None]:
     """Extract the verification URL and device code from Codex CLI output."""
+    output = _ANSI_PATTERN.sub("", output)
     url_match = _URL_PATTERN.search(output)
     device_code = None
     for pattern in _CODE_PATTERNS:
         code_match = pattern.search(output)
-        if code_match:
+        if code_match and _is_device_code_candidate(code_match.group(1)):
             device_code = code_match.group(1)
             break
 
@@ -107,6 +109,10 @@ def parse_device_login_output(output: str) -> dict[str, str | None]:
         "verification_url": url_match.group(0) if url_match else None,
         "device_code": device_code,
     }
+
+
+def _is_device_code_candidate(value: str) -> bool:
+    return any(character.isdigit() for character in value) or "-" in value
 
 
 def _codex_env() -> dict[str, str]:
