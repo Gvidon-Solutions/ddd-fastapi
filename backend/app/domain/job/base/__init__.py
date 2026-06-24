@@ -1,22 +1,18 @@
-"""Expose the job domain."""
+"""Expose the generic job domain."""
 
 from __future__ import annotations
 
-from .base import (
+from .entities import Job, JobArtifact, JobEvent
+from .repositories import JobArtifactRepository, JobEventRepository, JobRepository
+from .value_objects import (
     Actor,
     ActorType,
     ArtifactKind,
     ArtifactLocation,
     ArtifactLocationType,
     ArtifactRole,
-    Job,
-    JobArtifact,
-    JobArtifactRepository,
     JobError,
-    JobEvent,
-    JobEventRepository,
     JobEventType,
-    JobRepository,
     JobStage,
     JobStatus,
 )

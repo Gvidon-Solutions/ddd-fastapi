@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from app.domain.job.entities import Job
+from app.domain.job.base.entities import Job
 
 
 class JobRepository(ABC):

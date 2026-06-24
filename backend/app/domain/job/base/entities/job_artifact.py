@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from app.domain.job.value_objects import ArtifactKind, ArtifactLocation, ArtifactRole
+from app.domain.job.base.value_objects import (
+    ArtifactKind,
+    ArtifactLocation,
+    ArtifactRole,
+)
 
 
 @dataclass

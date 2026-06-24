@@ -5,8 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from app.domain.job.entities import JobArtifact
-from app.domain.job.value_objects import ArtifactRole
+from app.domain.job.base.entities import JobArtifact
+from app.domain.job.base.value_objects import ArtifactRole
 
 
 class JobArtifactRepository(ABC):

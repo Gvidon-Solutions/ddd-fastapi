@@ -18,9 +18,17 @@ from app.domain.job import (
     JobRepository,
     JobStatus,
 )
-from app.infrastructure.arq.jobs.codex_auth import execute_codex_auth
+from app.domain.job.codex_auth_job_use_case import (
+    CodexAuthJobResult,
+    CodexAuthResult,
+    CodexDeviceAuth,
+)
 from app.infrastructure.arq.jobs.codex_run import execute_codex_run
 from app.infrastructure.artifact_storage import FilesystemArtifactStorage
+from app.usecase.codex import (
+    CodexAuthenticator,
+    new_codex_auth_use_case,
+)
 from app.usecase.job import Clock
 
 pytestmark = pytest.mark.anyio
@@ -148,6 +156,21 @@ class FakeProcess:
         return self.return_code
 
 
+class FakeCodexAuthenticator(CodexAuthenticator):
+    """Return fixed Codex auth data."""
+
+    async def start_device_auth(self) -> CodexDeviceAuth:
+        """Start fake device auth."""
+        return CodexDeviceAuth(
+            verification_url="https://auth.openai.com/device",
+            user_code="ABCD-EFGH",
+        )
+
+    async def await_for_user_login(self) -> CodexAuthResult:
+        """Wait for fake user login."""
+        return CodexAuthResult(authenticated=True)
+
+
 def _job(
     name: str,
     input: dict | None = None,
@@ -173,31 +196,24 @@ async def test_codex_auth_writes_device_login_to_stage() -> None:
     job = _job("codex_auth")
     jobs = FakeJobRepository(job)
     job_events = FakeJobEventRepository()
-    clock = FixedClock()
-
-    async def process_factory(*_args, **_kwargs):
-        return FakeProcess(
-            stdout_lines=[
-                b"Open https://auth.openai.com/device and enter code ABCD-EFGH\n"
-            ],
-        )
 
     # Act
-    summary = await execute_codex_auth(
-        job_id=job.id,
+    use_case = new_codex_auth_use_case(
         jobs=jobs,
         job_events=job_events,
-        clock=clock,
-        process_factory=process_factory,
+        codex_authenticator=FakeCodexAuthenticator(),
     )
+    result = await use_case.execute(job.id)
 
     # Assert
     assert job.status == JobStatus.SUCCEEDED
-    assert summary["authenticated"] is True
+    assert isinstance(result, CodexAuthJobResult)
+    assert result.authenticated is True
     assert job.stage is not None
     assert job.stage.data is not None
     assert job.stage.data["verification_url"] == "https://auth.openai.com/device"
     assert job.stage.data["user_code"] == "ABCD-EFGH"
+    assert job.stage.data["device_code"] == "ABCD-EFGH"
     assert job.stage.data["status"] == "authenticated"
 
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from app.domain.job.value_objects import JobEventType
+from app.domain.job.base.value_objects import JobEventType
 
 
 @dataclass

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.domain.job.value_objects.actor_type import ActorType
+from app.domain.job.base.value_objects.actor_type import ActorType
 
 
 @dataclass(frozen=True)

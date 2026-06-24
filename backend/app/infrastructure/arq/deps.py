@@ -1,87 +1,78 @@
-"""FastDepends dependencies for ARQ job tasks."""
+"""ARQ worker dependency wiring."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from typing import Any
 
-from fast_depends import Depends
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.config import settings
-from app.domain.job import JobArtifactRepository, JobEventRepository, JobRepository
-from app.infrastructure.artifact_storage import new_filesystem_artifact_storage
-from app.infrastructure.clock import new_system_clock
-from app.infrastructure.sqlmodel.job import (
-    new_job_artifact_repository,
-    new_job_event_repository,
-    new_job_repository,
+from app.domain.job import (
+    Job,
+    JobArtifact,
+    JobEvent,
 )
-from app.usecase.job import ArtifactStorage, Clock
+from app.infrastructure.sqlmodel.job.job_artifact_repository import (
+    JobArtifactRepositoryImpl,
+)
+from app.infrastructure.sqlmodel.job.job_event_repository import JobEventRepositoryImpl
+from app.infrastructure.sqlmodel.job.job_repository import JobRepositoryImpl
+
+ARQ_DB_ENGINE = "db_engine"
+ARQ_ARTIFACT_STORAGE = "artifact_storage"
+ARQ_CLOCK = "clock"
+ARQ_CODEX_AUTHENTICATOR = "codex_authenticator"
 
 
-@dataclass(frozen=True)
-class JobTaskTransaction:
-    """Commit or roll back ARQ task persistence."""
+class AutocommitJobRepository(JobRepositoryImpl):
+    """Job repository that commits every write for ARQ progress visibility."""
 
-    session: AsyncSession
-
-    async def commit(self) -> None:
-        """Commit the current transaction."""
+    async def create(self, job: Job) -> None:
+        """Create and commit a job."""
+        await super().create(job)
         await self.session.commit()
 
-    async def rollback(self) -> None:
-        """Roll back the current transaction."""
-        await self.session.rollback()
+    async def save(self, job: Job) -> None:
+        """Save and commit a job."""
+        await super().save(job)
+        await self.session.commit()
 
 
-async def get_session() -> AsyncGenerator[AsyncSession]:
-    """Yield an ARQ task-scoped SQLModel session."""
-    engine = create_async_engine(str(settings.SQLALCHEMY_DATABASE_URI))
-    async with AsyncSession(engine) as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await engine.dispose()
+class AutocommitJobArtifactRepository(JobArtifactRepositoryImpl):
+    """Job artifact repository that commits every write."""
+
+    async def create(self, artifact: JobArtifact) -> None:
+        """Create and commit an artifact."""
+        await super().create(artifact)
+        await self.session.commit()
 
 
-def get_job_repository(
-    session: AsyncSession = Depends(get_session),
-) -> JobRepository:
-    """Provide a job repository."""
-    return new_job_repository(session)
+class AutocommitJobEventRepository(JobEventRepositoryImpl):
+    """Job event repository that commits every append."""
+
+    async def append(self, event: JobEvent) -> None:
+        """Append and commit an event."""
+        await super().append(event)
+        await self.session.commit()
 
 
-def get_job_artifact_repository(
-    session: AsyncSession = Depends(get_session),
-) -> JobArtifactRepository:
-    """Provide a job artifact repository."""
-    return new_job_artifact_repository(session)
+def get_arq_db_engine(ctx: dict[str, Any]) -> AsyncEngine:
+    """Return the ARQ worker database engine."""
+    return ctx[ARQ_DB_ENGINE]
 
 
-def get_job_event_repository(
-    session: AsyncSession = Depends(get_session),
-) -> JobEventRepository:
-    """Provide a job event repository."""
-    return new_job_event_repository(session)
+def new_arq_job_repository(session: AsyncSession) -> AutocommitJobRepository:
+    """Create an ARQ job repository."""
+    return AutocommitJobRepository(session)
 
 
-def get_artifact_storage() -> ArtifactStorage:
-    """Provide artifact storage."""
-    return new_filesystem_artifact_storage()
+def new_arq_job_artifact_repository(
+    session: AsyncSession,
+) -> AutocommitJobArtifactRepository:
+    """Create an ARQ job artifact repository."""
+    return AutocommitJobArtifactRepository(session)
 
 
-def get_clock() -> Clock:
-    """Provide a clock."""
-    return new_system_clock()
-
-
-def get_job_task_transaction(
-    session: AsyncSession = Depends(get_session),
-) -> JobTaskTransaction:
-    """Provide an ARQ task transaction."""
-    return JobTaskTransaction(session=session)
+def new_arq_job_event_repository(session: AsyncSession) -> AutocommitJobEventRepository:
+    """Create an ARQ job event repository."""
+    return AutocommitJobEventRepository(session)

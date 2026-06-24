@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 
 from sqlalchemy import JSON, Column, DateTime
@@ -102,8 +103,16 @@ def _stage_to_record(stage: JobStage | None) -> dict | None:
         "current": stage.current,
         "total": stage.total,
         "message": stage.message,
-        "data": stage.data,
+        "data": _data_to_record(stage.data),
     }
+
+
+def _data_to_record(data):
+    if data is None:
+        return None
+    if is_dataclass(data):
+        return asdict(data)
+    return data
 
 
 def _actor_to_entity(actor: dict) -> Actor:

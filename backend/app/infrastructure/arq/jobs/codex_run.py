@@ -7,10 +7,10 @@ import json
 import os
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Any
 from uuid import UUID, uuid4
 
-from fast_depends import Depends, inject
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.domain.job import (
@@ -28,39 +28,35 @@ from app.domain.job import (
     JobStatus,
 )
 from app.infrastructure.arq.deps import (
-    JobTaskTransaction,
-    get_artifact_storage,
-    get_clock,
-    get_job_artifact_repository,
-    get_job_event_repository,
-    get_job_repository,
-    get_job_task_transaction,
+    ARQ_ARTIFACT_STORAGE,
+    ARQ_CLOCK,
+    get_arq_db_engine,
+    new_arq_job_artifact_repository,
+    new_arq_job_event_repository,
+    new_arq_job_repository,
 )
 from app.usecase.job import ArtifactStorage, Clock
 
 
-@inject
 async def codex_run(
     ctx: dict[str, Any],
     job_id: str,
-    jobs: Annotated[JobRepository, Depends(get_job_repository)],
-    artifacts: Annotated[JobArtifactRepository, Depends(get_job_artifact_repository)],
-    storage: Annotated[ArtifactStorage, Depends(get_artifact_storage)],
-    job_events: Annotated[JobEventRepository, Depends(get_job_event_repository)],
-    clock: Annotated[Clock, Depends(get_clock)],
-    transaction: Annotated[JobTaskTransaction, Depends(get_job_task_transaction)],
 ) -> dict:
     """Run Codex exec for one persisted job."""
-    del ctx
-    return await execute_codex_run(
-        job_id=UUID(job_id),
-        jobs=jobs,
-        artifacts=artifacts,
-        storage=storage,
-        job_events=job_events,
-        clock=clock,
-        transaction=transaction,
-    )
+    engine = get_arq_db_engine(ctx)
+    async with AsyncSession(engine) as session:
+        try:
+            return await execute_codex_run(
+                job_id=UUID(job_id),
+                jobs=new_arq_job_repository(session),
+                artifacts=new_arq_job_artifact_repository(session),
+                storage=ctx[ARQ_ARTIFACT_STORAGE],
+                job_events=new_arq_job_event_repository(session),
+                clock=ctx[ARQ_CLOCK],
+            )
+        except Exception:
+            await session.rollback()
+            raise
 
 
 async def execute_codex_run(
@@ -70,7 +66,6 @@ async def execute_codex_run(
     storage: ArtifactStorage,
     job_events: JobEventRepository,
     clock: Clock,
-    transaction: JobTaskTransaction | None = None,
     process_factory: Any = asyncio.create_subprocess_exec,
 ) -> dict:
     """Execute Codex for one persisted job."""
@@ -97,7 +92,6 @@ async def execute_codex_run(
             created_at=clock.now(),
         )
     )
-    await _commit(transaction)
 
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
@@ -162,7 +156,6 @@ async def execute_codex_run(
                     created_at=clock.now(),
                 )
             )
-            await _commit(transaction)
 
         if stderr_lines:
             stderr_metadata = {"filename": "codex_stderr.log", "source": "codex"}
@@ -193,7 +186,6 @@ async def execute_codex_run(
                     created_at=clock.now(),
                 )
             )
-            await _commit(transaction)
 
         if return_code != 0:
             if not error_output:
@@ -230,7 +222,6 @@ async def execute_codex_run(
                     created_at=clock.now(),
                 )
             )
-            await _commit(transaction)
 
         result_summary = {
             "return_code": return_code,
@@ -258,7 +249,6 @@ async def execute_codex_run(
                 created_at=clock.now(),
             )
         )
-        await _commit(transaction)
         return result_summary
     except Exception as exc:
         job.status = JobStatus.FAILED
@@ -283,7 +273,6 @@ async def execute_codex_run(
                 created_at=clock.now(),
             )
         )
-        await _commit(transaction)
         raise
     finally:
         output_path.unlink(missing_ok=True)
@@ -384,9 +373,3 @@ def _fallback_result(stdout_lines: Sequence[str]) -> str:
                 if isinstance(value, str) and value:
                     return value
     return ""
-
-
-async def _commit(transaction: JobTaskTransaction | None) -> None:
-    """Commit context changes when a database session is present."""
-    if transaction is not None:
-        await transaction.commit()

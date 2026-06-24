@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 
 from sqlalchemy import JSON, Column, DateTime
@@ -45,7 +46,13 @@ class JobEventDTO(SQLModel, table=True):
             id=event.id,
             job_id=event.job_id,
             type=event.type.value,
-            data=event.data,
+            data=_data_to_record(event.data),
             message=event.message,
             created_at=event.created_at,
         )
+
+
+def _data_to_record(data):
+    if is_dataclass(data):
+        return asdict(data)
+    return data
