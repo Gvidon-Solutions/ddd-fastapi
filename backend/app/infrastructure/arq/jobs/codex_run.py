@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
-import os
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -35,6 +31,7 @@ from app.infrastructure.arq.deps import (
     new_arq_job_event_repository,
     new_arq_job_repository,
 )
+from app.infrastructure.codex import CodexExecutor, new_codex_executor
 from app.usecase.job import ArtifactStorage, Clock
 
 
@@ -66,13 +63,13 @@ async def execute_codex_run(
     storage: ArtifactStorage,
     job_events: JobEventRepository,
     clock: Clock,
-    process_factory: Any = asyncio.create_subprocess_exec,
+    codex_executor: CodexExecutor | None = None,
 ) -> dict:
     """Execute Codex for one persisted job."""
     job = await jobs.get(job_id)
     prompt = _job_prompt(job)
     job_workspace = _job_workspace(job)
-    output_path = job_workspace / ".codex-output.txt"
+    executor = codex_executor or new_codex_executor()
 
     job.status = JobStatus.RUNNING
     job.stage = JobStage(
@@ -96,33 +93,14 @@ async def execute_codex_run(
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
     try:
-        job_workspace.mkdir(parents=True, exist_ok=True)
-        process = await process_factory(
-            *_codex_exec_args(
-                job_workspace=job_workspace,
-                output_path=output_path,
-            ),
-            cwd=job_workspace,
-            env=_codex_env(),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        exec_result = await executor.codex_exec(
+            prompt=prompt,
+            workdir=job_workspace,
         )
-        assert process.stdin is not None
-        assert process.stdout is not None
-        assert process.stderr is not None
-
-        stdout_task = asyncio.create_task(_read_lines(process.stdout, stdout_lines))
-        stderr_task = asyncio.create_task(_read_lines(process.stderr, stderr_lines))
-        process.stdin.write(prompt.encode())
-        await process.stdin.drain()
-        process.stdin.close()
-        await process.stdin.wait_closed()
-        return_code = await process.wait()
-        await stdout_task
-        await stderr_task
-
-        result = _read_codex_result(output_path, stdout_lines)
+        stdout_lines = exec_result.stdout_lines
+        stderr_lines = exec_result.stderr_lines
+        return_code = exec_result.return_code
+        result = exec_result.output
         stdout_count = len(stdout_lines)
         stderr_count = len(stderr_lines)
         error_output = "\n".join(stderr_lines).strip()
@@ -274,37 +252,6 @@ async def execute_codex_run(
             )
         )
         raise
-    finally:
-        output_path.unlink(missing_ok=True)
-
-
-def _codex_exec_args(
-    *,
-    job_workspace: Path,
-    output_path: Path,
-) -> list[str]:
-    """Build the Codex CLI command for one non-interactive job."""
-    return [
-        settings.CODEX_CLI_PATH,
-        "exec",
-        "--json",
-        "--strict-config",
-        "--skip-git-repo-check",
-        "-C",
-        str(job_workspace),
-        "-m",
-        settings.CODEX_JOB_MODEL,
-        "-s",
-        settings.CODEX_JOB_SANDBOX_MODE,
-        "-c",
-        f'model_reasoning_effort="{settings.CODEX_JOB_REASONING_EFFORT}"',
-        "-c",
-        f'approval_policy="{settings.CODEX_JOB_APPROVAL_POLICY}"',
-        "-o",
-        str(output_path),
-        "-",
-    ]
-
 
 def _job_prompt(job: Job) -> str:
     """Return the prompt for a Codex run job."""
@@ -323,53 +270,3 @@ def _job_workspace(job: Job) -> Path:
         return Path(workdir)
     return Path(settings.CODEX_JOB_WORKING_DIRECTORY) / str(job.id)
 
-
-def _codex_env() -> dict[str, str]:
-    """Return environment variables for Codex subprocesses."""
-    codex_home = Path(settings.CODEX_JOB_WORKING_DIRECTORY)
-    codex_home.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    env["HOME"] = str(codex_home)
-    return env
-
-
-async def _read_lines(
-    stream: asyncio.StreamReader,
-    lines: list[str],
-) -> None:
-    """Read stream lines into a list."""
-    while line := await stream.readline():
-        decoded_line = line.decode(errors="replace").strip()
-        if decoded_line:
-            lines.append(decoded_line)
-
-
-def _read_codex_result(output_path: Path, stdout_lines: Sequence[str]) -> str:
-    """Read Codex output file with a stdout fallback."""
-    if output_path.is_file():
-        return output_path.read_text(encoding="utf-8").strip()
-    return _fallback_result(stdout_lines)
-
-
-def _fallback_result(stdout_lines: Sequence[str]) -> str:
-    """Return a best-effort result from streamed stdout events."""
-    for line in reversed(stdout_lines):
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            if line:
-                return line
-            continue
-        if not isinstance(event, dict):
-            continue
-        for key in ("message", "text", "content"):
-            value = event.get(key)
-            if isinstance(value, str) and value:
-                return value
-        item = event.get("item")
-        if isinstance(item, dict):
-            for key in ("message", "text", "content"):
-                value = item.get(key)
-                if isinstance(value, str) and value:
-                    return value
-    return ""

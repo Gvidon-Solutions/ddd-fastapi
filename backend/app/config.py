@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     CODEX_JOB_MODEL: str = "gpt-5.5"
     CODEX_JOB_REASONING_EFFORT: Literal["low", "medium", "high", "xhigh"] = "low"
     CODEX_JOB_WORKING_DIRECTORY: str = str(
-        REPO_ROOT / "backend" / "app" / "infrastructure" / "arq" / "codex_workspace"
+        REPO_ROOT / "backend" / "app" / "infrastructure" / "arq" / ".codex_work_dir"
     )
     CODEX_JOB_SANDBOX_MODE: Literal[
         "read-only",

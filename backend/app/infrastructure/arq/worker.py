@@ -13,7 +13,7 @@ from app.infrastructure.arq.deps import (
     ARQ_CODEX_AUTHENTICATOR,
     ARQ_DB_ENGINE,
 )
-from app.infrastructure.arq.jobs import codex_auth, codex_run
+from app.infrastructure.arq.jobs import execute_codex_auth_job_use_case, codex_run
 from app.infrastructure.arq.settings import arq_redis_settings
 from app.infrastructure.artifact_storage import new_filesystem_artifact_storage
 from app.infrastructure.clock import new_system_clock
@@ -38,7 +38,7 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
 class WorkerSettings:
     """Configure the ARQ worker process."""
 
-    functions = [codex_auth, codex_run]
+    functions = [execute_codex_auth_job_use_case, codex_run]
     on_startup = on_startup
     on_shutdown = on_shutdown
     redis_settings = arq_redis_settings()

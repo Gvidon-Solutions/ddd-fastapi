@@ -9,7 +9,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.domain.job.codex_auth_job_use_case import CodexAuthResult, CodexDeviceAuth
-from app.usecase.codex import CodexAuthenticator
+from app.usecase.job.codex import CodexAuthenticator
 
 _URL_PATTERN = re.compile(r"https://[^\s]+")
 _CODE_PATTERNS = (

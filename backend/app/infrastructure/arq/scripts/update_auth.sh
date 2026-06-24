@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SOURCE_CODEX_DIR="${SOURCE_CODEX_DIR:-${HOME}/.codex}"
-TARGET_CODEX_DIR="${TARGET_CODEX_DIR:-backend/app/infrastructure/arq/codex_workspace/.codex}"
+TARGET_CODEX_DIR="${TARGET_CODEX_DIR:-backend/app/infrastructure/arq/.codex_work_dir/.codex}"
 
 SOURCE_AUTH_FILE="${SOURCE_AUTH_FILE:-${SOURCE_CODEX_DIR}/auth.json}"
 

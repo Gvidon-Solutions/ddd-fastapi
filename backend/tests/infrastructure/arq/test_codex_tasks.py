@@ -25,7 +25,8 @@ from app.domain.job.codex_auth_job_use_case import (
 )
 from app.infrastructure.arq.jobs.codex_run import execute_codex_run
 from app.infrastructure.artifact_storage import FilesystemArtifactStorage
-from app.usecase.codex import (
+from app.infrastructure.codex import CodexExecResult
+from app.usecase.job.codex import (
     CodexAuthenticator,
     new_codex_auth_use_case,
 )
@@ -98,64 +99,6 @@ class FakeJobEventRepository(JobEventRepository):
         return [event for event in self.events if event.job_id == job_id]
 
 
-class FakeStream:
-    """Async stream backed by lines."""
-
-    def __init__(self, lines: list[bytes]):
-        self.lines = lines
-
-    async def readline(self) -> bytes:
-        """Return the next stream line."""
-        if not self.lines:
-            return b""
-        return self.lines.pop(0)
-
-
-class FakeStdin:
-    """Writable fake process stdin."""
-
-    def __init__(self) -> None:
-        self.content = b""
-
-    def write(self, content: bytes) -> None:
-        """Write content."""
-        self.content += content
-
-    async def drain(self) -> None:
-        """Drain content."""
-
-    def close(self) -> None:
-        """Close stdin."""
-
-    async def wait_closed(self) -> None:
-        """Wait until stdin is closed."""
-
-
-class FakeProcess:
-    """Fake subprocess."""
-
-    def __init__(
-        self,
-        stdout_lines: list[bytes],
-        stderr_lines: list[bytes] | None = None,
-        return_code: int = 0,
-        on_wait=None,
-    ):
-        self.stdout = FakeStream(stdout_lines)
-        self.stderr = FakeStream(stderr_lines or [])
-        self.stdin = FakeStdin()
-        self.returncode: int | None = None
-        self.return_code = return_code
-        self.on_wait = on_wait
-
-    async def wait(self) -> int:
-        """Finish the process."""
-        if self.on_wait is not None:
-            self.on_wait()
-        self.returncode = self.return_code
-        return self.return_code
-
-
 class FakeCodexAuthenticator(CodexAuthenticator):
     """Return fixed Codex auth data."""
 
@@ -169,6 +112,30 @@ class FakeCodexAuthenticator(CodexAuthenticator):
     async def await_for_user_login(self) -> CodexAuthResult:
         """Wait for fake user login."""
         return CodexAuthResult(authenticated=True)
+
+
+class FakeCodexExecutor:
+    """Return fixed Codex exec data."""
+
+    def __init__(self) -> None:
+        self.prompt: str | None = None
+        self.workdir: Path | None = None
+
+    async def codex_exec(
+        self,
+        *,
+        prompt: str,
+        workdir: Path,
+    ) -> CodexExecResult:
+        """Execute fake Codex."""
+        self.prompt = prompt
+        self.workdir = workdir
+        return CodexExecResult(
+            return_code=0,
+            output="Codex result",
+            stdout_lines=['{"type":"message","message":"running"}'],
+            stderr_lines=["warning"],
+        )
 
 
 def _job(
@@ -231,18 +198,7 @@ async def test_codex_run_creates_output_and_log_artifacts(tmp_path: Path) -> Non
     storage = FilesystemArtifactStorage(root=tmp_path / "artifacts")
     job_events = FakeJobEventRepository()
     clock = FixedClock()
-
-    async def process_factory(*args, **_kwargs):
-        output_path = Path(args[args.index("-o") + 1])
-
-        def write_output() -> None:
-            output_path.write_text("Codex result", encoding="utf-8")
-
-        return FakeProcess(
-            stdout_lines=[b'{"type":"message","message":"running"}\n'],
-            stderr_lines=[b"warning\n"],
-            on_wait=write_output,
-        )
+    codex_executor = FakeCodexExecutor()
 
     # Act
     summary = await execute_codex_run(
@@ -252,7 +208,7 @@ async def test_codex_run_creates_output_and_log_artifacts(tmp_path: Path) -> Non
         storage=storage,
         job_events=job_events,
         clock=clock,
-        process_factory=process_factory,
+        codex_executor=codex_executor,
     )
 
     # Assert
@@ -265,3 +221,5 @@ async def test_codex_run_creates_output_and_log_artifacts(tmp_path: Path) -> Non
     assert len(output_artifacts) == 1
     assert len(log_artifacts) == 2
     assert await storage.read(output_artifacts[0].location) == b"Codex result"
+    assert codex_executor.prompt == "Review repository"
+    assert codex_executor.workdir == tmp_path / "workdir"

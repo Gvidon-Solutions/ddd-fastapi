@@ -13,10 +13,10 @@ from app.infrastructure.arq.deps import (
     new_arq_job_event_repository,
     new_arq_job_repository,
 )
-from app.usecase.codex import new_codex_auth_use_case
+from app.usecase.job.codex import new_codex_auth_use_case
 
 
-async def codex_auth(
+async def execute_codex_auth_job_use_case(
     ctx: dict[str, Any],
     job_id: str,
 ) -> dict:

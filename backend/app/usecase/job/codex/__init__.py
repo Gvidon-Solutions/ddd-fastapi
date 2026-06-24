@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .codex_auth_use_case import CodexAuthUseCase, new_codex_auth_use_case
+from .codex_auth_job_use_case import CodexAuthUseCase, new_codex_auth_use_case
 from .ports import CodexAuthenticator
 
 __all__ = (

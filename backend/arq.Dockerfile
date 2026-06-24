@@ -4,8 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/usr/local \
-    CODEX_JOB_WORKING_DIRECTORY=/opt/backend/app/infrastructure/arq/codex_workspace \
-    CODEX_WORKSPACE=/opt/backend/app/infrastructure/arq/codex_workspace \
+    CODEX_JOB_WORKING_DIRECTORY=/opt/backend/app/infrastructure/arq/.codex_work_dir \
+    CODEX_WORKSPACE=/opt/backend/app/infrastructure/arq/.codex_work_dir \
     PATH=/root/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 WORKDIR /opt/backend
@@ -32,16 +32,17 @@ COPY backend/app/usecase/job app/usecase/job
 COPY backend/app/infrastructure/__init__.py app/infrastructure/
 COPY backend/app/infrastructure/arq/__init__.py backend/app/infrastructure/arq/job_queue.py backend/app/infrastructure/arq/settings.py backend/app/infrastructure/arq/worker.py app/infrastructure/arq/
 COPY backend/app/infrastructure/arq/jobs app/infrastructure/arq/jobs
-COPY backend/app/infrastructure/arq/codex_workspace/.gitkeep app/infrastructure/arq/codex_workspace/.gitkeep
-COPY backend/app/infrastructure/arq/codex_workspace/.codex/config.toml app/infrastructure/arq/codex_workspace/.codex/config.toml
+COPY backend/app/infrastructure/arq/.codex_work_dir/.gitkeep app/infrastructure/arq/.codex_work_dir/.gitkeep
+COPY backend/app/infrastructure/arq/.codex_work_dir/.codex/config.toml app/infrastructure/arq/.codex_work_dir/.codex/config.toml
 COPY backend/app/infrastructure/artifact_storage app/infrastructure/artifact_storage
 COPY backend/app/infrastructure/clock app/infrastructure/clock
+COPY backend/app/infrastructure/codex app/infrastructure/codex
 COPY backend/app/infrastructure/sqlmodel/__init__.py backend/app/infrastructure/sqlmodel/datetime.py app/infrastructure/sqlmodel/
 COPY backend/app/infrastructure/sqlmodel/job app/infrastructure/sqlmodel/job
 
 RUN mkdir -p "${CODEX_WORKSPACE}/.codex"
 
-ENV HOME=/opt/backend/app/infrastructure/arq/codex_workspace
+ENV HOME=/opt/backend/app/infrastructure/arq/.codex_work_dir
 
 WORKDIR /opt/backend
 

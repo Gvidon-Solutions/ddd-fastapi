@@ -31,7 +31,7 @@ from app.domain.job.codex_auth_job_use_case import (
     Stage4CodexAuthFailed,
     Stage4CodexAuthFailedData,
 )
-from app.usecase.codex.ports import CodexAuthenticator
+from app.usecase.job.codex.ports import CodexAuthenticator
 
 
 class CodexAuthUseCase(ABC):
