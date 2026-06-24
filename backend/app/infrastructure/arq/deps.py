@@ -12,15 +12,16 @@ from app.domain.job import (
     JobArtifact,
     JobEvent,
 )
+from app.infrastructure.sqlmodel.event.job_event_repository import (
+    JobEventRepositoryImpl,
+)
 from app.infrastructure.sqlmodel.job.job_artifact_repository import (
     JobArtifactRepositoryImpl,
 )
-from app.infrastructure.sqlmodel.job.job_event_repository import JobEventRepositoryImpl
 from app.infrastructure.sqlmodel.job.job_repository import JobRepositoryImpl
 
 ARQ_DB_ENGINE = "db_engine"
 ARQ_ARTIFACT_STORAGE = "artifact_storage"
-ARQ_CLOCK = "clock"
 ARQ_CODEX_AUTHENTICATOR = "codex_authenticator"
 
 

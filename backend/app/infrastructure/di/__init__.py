@@ -5,7 +5,6 @@ from __future__ import annotations
 from .injection import (
     get_artifact_storage,
     get_authenticate_user_use_case,
-    get_clock,
     get_create_item_use_case,
     get_create_user_use_case,
     get_delete_current_user_use_case,
@@ -34,7 +33,6 @@ from .injection import (
 __all__ = (
     "get_artifact_storage",
     "get_authenticate_user_use_case",
-    "get_clock",
     "get_create_item_use_case",
     "get_create_user_use_case",
     "get_delete_current_user_use_case",

@@ -12,7 +12,6 @@ class Stage3CodexAuthCompletedData:
     """Represent stage 3 data."""
     authenticated: bool
     verification_url: str | None = None
-    user_code: str | None = None
     device_code: str | None = None
     error_message: str | None = None
     status: str = "authenticated"

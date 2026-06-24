@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .job_queue import ArqJobQueue, new_arq_job_queue
-from .jobs import execute_codex_auth_job_use_case, codex_run
+from .jobs import codex_run, execute_codex_auth_job_use_case
 from .worker import WorkerSettings
 
 __all__ = (

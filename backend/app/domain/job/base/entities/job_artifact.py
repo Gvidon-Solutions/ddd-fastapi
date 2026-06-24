@@ -17,8 +17,10 @@ from app.domain.job.base.value_objects import (
 class JobArtifact:
     """Represent a payload produced by a job."""
 
-    id: UUID
+    artifact_id: UUID
     job_id: UUID
+    name: str
+    description: str | None
     role: ArtifactRole
     kind: ArtifactKind
     location: ArtifactLocation

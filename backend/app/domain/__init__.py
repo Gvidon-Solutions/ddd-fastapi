@@ -2,4 +2,4 @@
 
 from __future__ import annotations
 
-__all__ = ("item", "job", "user")
+__all__ = ("event", "item", "job", "user")

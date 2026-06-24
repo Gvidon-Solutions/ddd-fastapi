@@ -16,33 +16,40 @@ from app.domain.job import (
     JobArtifact,
     JobError,
     JobEvent,
+    JobEventPayload,
     JobEventType,
     JobStage,
     JobStatus,
 )
+from app.infrastructure.sqlmodel.event import new_job_event_repository
 from app.infrastructure.sqlmodel.job import (
     new_job_artifact_repository,
-    new_job_event_repository,
     new_job_repository,
 )
 
 pytestmark = pytest.mark.anyio
 
 
-def _job(name: str = "run_codex") -> Job:
+def _job(
+    job_type: str = "codex_run",
+    job_name: str = "Run Codex",
+) -> Job:
     return Job(
-        id=uuid4(),
-        name=name,
-        input={"prompt": "Review repository"},
-        status=JobStatus.QUEUED,
-        stage=None,
+        job_id=uuid4(),
+        job_type=job_type,
+        job_name=job_name,
+        job_description=None,
+        job_input={"prompt": "Review repository"},
+        job_status=JobStatus.QUEUED,
+        job_stage=None,
         result_summary=None,
         root_initiator=Actor(type=ActorType.USER, id="anton"),
         parent_job_id=None,
         requested_at=datetime(2026, 6, 23, tzinfo=UTC),
+        updated_at=datetime(2026, 6, 23, tzinfo=UTC),
         started_at=None,
         finished_at=None,
-        error=None,
+        job_error=None,
     )
 
 
@@ -56,7 +63,7 @@ async def test_job_repository_creates_and_gets_job(db_session) -> None:
     await db_session.commit()
 
     # Assert
-    assert await repository.get(job.id) == job
+    assert await repository.get(job.job_id) == job
 
 
 async def test_job_repository_saves_job_changes(db_session) -> None:
@@ -65,9 +72,14 @@ async def test_job_repository_saves_job_changes(db_session) -> None:
     job = _job()
     await repository.create(job)
     await db_session.commit()
-    job.status = JobStatus.FAILED
-    job.stage = JobStage(key="failed", data={"retryable": False})
-    job.error = JobError(code="RuntimeError", message="failed")
+    job.job_status = JobStatus.FAILED
+    job.updated_at = datetime(2026, 6, 23, 1, tzinfo=UTC)
+    job.job_stage = JobStage(
+        key="failed",
+        updated_at=job.updated_at,
+        data={"retryable": False},
+    )
+    job.job_error = JobError(code="RuntimeError", message="failed")
     job.finished_at = datetime(2026, 6, 23, 1, tzinfo=UTC)
 
     # Act
@@ -75,7 +87,7 @@ async def test_job_repository_saves_job_changes(db_session) -> None:
     await db_session.commit()
 
     # Assert
-    assert await repository.get(job.id) == job
+    assert await repository.get(job.job_id) == job
 
 
 async def test_job_artifact_repository_lists_and_filters_artifacts(db_session) -> None:
@@ -85,8 +97,10 @@ async def test_job_artifact_repository_lists_and_filters_artifacts(db_session) -
     job = _job()
     await job_repository.create(job)
     output = JobArtifact(
-        id=uuid4(),
-        job_id=job.id,
+        artifact_id=uuid4(),
+        job_id=job.job_id,
+        name="output.txt",
+        description=None,
         role=ArtifactRole.OUTPUT,
         kind=ArtifactKind.FILE,
         location=ArtifactLocation(
@@ -97,8 +111,10 @@ async def test_job_artifact_repository_lists_and_filters_artifacts(db_session) -
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
     )
     log = JobArtifact(
-        id=uuid4(),
-        job_id=job.id,
+        artifact_id=uuid4(),
+        job_id=job.job_id,
+        name="stdout.log",
+        description=None,
         role=ArtifactRole.LOG,
         kind=ArtifactKind.TEXT,
         location=ArtifactLocation(
@@ -113,8 +129,8 @@ async def test_job_artifact_repository_lists_and_filters_artifacts(db_session) -
     await db_session.commit()
 
     # Act
-    outputs = await artifact_repository.list_by_job(job.id, role=ArtifactRole.OUTPUT)
-    artifacts = await artifact_repository.list_by_job(job.id)
+    outputs = await artifact_repository.list_by_job(job.job_id, role=ArtifactRole.OUTPUT)
+    artifacts = await artifact_repository.list_by_job(job.job_id)
 
     # Assert
     assert outputs == [output]
@@ -128,20 +144,28 @@ async def test_job_event_repository_appends_and_lists_events(db_session) -> None
     job = _job()
     await job_repository.create(job)
     started = JobEvent(
-        id=uuid4(),
-        job_id=job.id,
-        type=JobEventType.STARTED,
-        data={},
-        message=None,
+        event_id=uuid4(),
+        type="JobStartedV1",
+        source="job",
+        version="v1",
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
+        payload=JobEventPayload(
+            job_id_issuer=job.job_id,
+            job_event_type=JobEventType.STARTED,
+            message=None,
+        ),
     )
     succeeded = JobEvent(
-        id=uuid4(),
-        job_id=job.id,
-        type=JobEventType.SUCCEEDED,
-        data={"summary": {"changed_files": 1}},
-        message=None,
+        event_id=uuid4(),
+        type="JobSucceededV1",
+        source="job",
+        version="v1",
         created_at=datetime(2026, 6, 23, 1, tzinfo=UTC),
+        payload=JobEventPayload(
+            job_id_issuer=job.job_id,
+            job_event_type=JobEventType.SUCCEEDED,
+            message=None,
+        ),
     )
 
     # Act
@@ -150,4 +174,4 @@ async def test_job_event_repository_appends_and_lists_events(db_session) -> None
     await db_session.commit()
 
     # Assert
-    assert await event_repository.list_by_job(job.id) == [started, succeeded]
+    assert await event_repository.list_by_job(job.job_id) == [started, succeeded]

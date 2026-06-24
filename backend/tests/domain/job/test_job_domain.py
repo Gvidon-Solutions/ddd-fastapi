@@ -1,5 +1,6 @@
 """Job domain tests."""
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -13,9 +14,22 @@ from app.domain.job import (
     Job,
     JobArtifact,
     JobEvent,
+    JobEventPayload,
     JobEventType,
     JobStatus,
 )
+
+
+@dataclass(kw_only=True)
+class JobArtifactCreatedPayload(JobEventPayload):
+    """Represent a job artifact created payload."""
+
+    job_event_type: JobEventType = field(
+        default=JobEventType.ARTIFACT_CREATED,
+        init=False,
+    )
+    message: str | None = field(default="Created artifact changed.py", init=False)
+    artifact_id: str
 
 
 def test_job_represents_a_queued_execution() -> None:
@@ -29,24 +43,29 @@ def test_job_represents_a_queued_execution() -> None:
 
     # Act
     job = Job(
-        id=uuid4(),
-        name="run_codex",
-        input={"prompt": "Review repository"},
-        status=JobStatus.QUEUED,
-        stage=None,
+        job_id=uuid4(),
+        job_type="codex_run",
+        job_name="Run Codex",
+        job_description="Run Codex against repository",
+        job_input={"prompt": "Review repository"},
+        job_status=JobStatus.QUEUED,
+        job_stage=None,
         result_summary=None,
         root_initiator=initiator,
         parent_job_id=None,
         requested_at=now,
+        updated_at=now,
         started_at=None,
         finished_at=None,
-        error=None,
+        job_error=None,
     )
 
     # Assert
-    assert job.name == "run_codex"
-    assert job.input == {"prompt": "Review repository"}
-    assert job.status == JobStatus.QUEUED
+    assert job.job_type == "codex_run"
+    assert job.job_name == "Run Codex"
+    assert job.job_input == {"prompt": "Review repository"}
+    assert job.job_status == JobStatus.QUEUED
+    assert job.updated_at == now
     assert job.root_initiator == initiator
 
 
@@ -57,8 +76,10 @@ def test_job_artifact_and_event_capture_execution_output() -> None:
 
     # Act
     artifact = JobArtifact(
-        id=uuid4(),
+        artifact_id=uuid4(),
         job_id=job_id,
+        name="changed.py",
+        description=None,
         role=ArtifactRole.OUTPUT,
         kind=ArtifactKind.FILE,
         location=ArtifactLocation(
@@ -69,16 +90,20 @@ def test_job_artifact_and_event_capture_execution_output() -> None:
         created_at=now,
     )
     event = JobEvent(
-        id=uuid4(),
-        job_id=job_id,
-        type=JobEventType.ARTIFACT_CREATED,
-        data={"artifact_id": str(artifact.id)},
-        message="Created artifact changed.py",
+        event_id=uuid4(),
+        type="JobArtifactCreatedV1",
+        source="job",
+        version="v1",
         created_at=now,
+        payload=JobArtifactCreatedPayload(
+            job_id_issuer=job_id,
+            artifact_id=str(artifact.artifact_id),
+        ),
     )
 
     # Assert
     assert artifact.job_id == job_id
     assert artifact.role == ArtifactRole.OUTPUT
-    assert event.type == JobEventType.ARTIFACT_CREATED
-    assert event.data == {"artifact_id": str(artifact.id)}
+    assert event.type == "JobArtifactCreatedV1"
+    assert event.payload.job_event_type == JobEventType.ARTIFACT_CREATED
+    assert event.payload.artifact_id == str(artifact.artifact_id)

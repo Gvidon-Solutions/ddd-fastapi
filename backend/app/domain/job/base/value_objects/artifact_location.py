@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.domain.job.base.value_objects.artifact_location_type import ArtifactLocationType
+from app.domain.job.base.value_objects.artifact_location_type import (
+    ArtifactLocationType,
+)
 
 
 @dataclass(frozen=True)

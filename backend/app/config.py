@@ -74,7 +74,12 @@ class Settings(BaseSettings):
     ARQ_JOB_TIMEOUT_SECONDS: int = 60 * 60
     ARQ_RESULT_TTL_SECONDS: int = 60 * 60
     JOB_ARTIFACT_STORAGE_DIRECTORY: str = str(
-        REPO_ROOT / "backend" / "app" / "infrastructure" / "artifact_storage" / "files"
+        REPO_ROOT
+        / "backend"
+        / "app"
+        / "infrastructure"
+        / "job_artifact_storage"
+        / "files"
     )
 
     CODEX_JOB_MODEL: str = "gpt-5.5"

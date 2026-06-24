@@ -23,8 +23,10 @@ class JobArtifactDTO(SQLModel, table=True):
 
     __tablename__ = "job_artifact"
 
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    job_id: uuid.UUID = Field(foreign_key="job.id", nullable=False, index=True)
+    artifact_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    job_id: uuid.UUID = Field(foreign_key="job.job_id", nullable=False, index=True)
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None)
     role: str = Field(max_length=32, index=True)
     kind: str = Field(max_length=32)
     location: dict = Field(sa_column=Column(JSON, nullable=False))
@@ -40,8 +42,10 @@ class JobArtifactDTO(SQLModel, table=True):
     def to_entity(self) -> JobArtifact:
         """Convert this persistence DTO to a domain entity."""
         return JobArtifact(
-            id=self.id,
+            artifact_id=self.artifact_id,
             job_id=self.job_id,
+            name=self.name,
+            description=self.description,
             role=ArtifactRole(self.role),
             kind=ArtifactKind(self.kind),
             location=ArtifactLocation(
@@ -56,8 +60,10 @@ class JobArtifactDTO(SQLModel, table=True):
     def from_entity(artifact: JobArtifact) -> JobArtifactDTO:
         """Build a persistence DTO from a domain entity."""
         return JobArtifactDTO(
-            id=artifact.id,
+            artifact_id=artifact.artifact_id,
             job_id=artifact.job_id,
+            name=artifact.name,
+            description=artifact.description,
             role=artifact.role.value,
             kind=artifact.kind.value,
             location={

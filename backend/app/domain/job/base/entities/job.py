@@ -13,15 +13,18 @@ from app.domain.job.base.value_objects import Actor, JobError, JobStage, JobStat
 class Job:
     """Represent a concrete execution run."""
 
-    id: UUID
-    name: str
-    input: dict | None
-    status: JobStatus
-    stage: JobStage | None
+    job_id: UUID
+    job_type: str
+    job_name: str
+    job_description: str | None
+    job_input: dict | None
+    job_status: JobStatus
+    job_stage: JobStage | None
     result_summary: dict | None
     root_initiator: Actor
     parent_job_id: UUID | None
     requested_at: datetime
+    updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
-    error: JobError | None
+    job_error: JobError | None

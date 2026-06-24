@@ -13,3 +13,4 @@ class JobEventType(StrEnum):
     ARTIFACT_CREATED = "artifact_created"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from uuid import UUID
@@ -15,14 +16,16 @@ from app.domain.job import (
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthJobResult,
     CodexAuthResult,
-    CodexDeviceAuth,
     Event1CodexAuthStarted,
-    Event2WaitingForUserLogin,
-    Event2WaitingForUserLoginData,
+    Event1CodexAuthStartedPayload,
+    Event2UserLoginRequested,
+    Event2UserLoginRequestedPayload,
     Event3CodexAuthSucceeded,
-    Event3CodexAuthSucceededData,
+    Event3CodexAuthSucceededPayload,
     Event4CodexAuthFailed,
-    Event4CodexAuthFailedData,
+    Event4CodexAuthFailedPayload,
+    Event5CodexAuthCancelled,
+    Event5CodexAuthCancelledPayload,
     Stage1StartingCodexDeviceAuth,
     Stage2WaitingForUserLogin,
     Stage2WaitingForUserLoginData,
@@ -30,6 +33,8 @@ from app.domain.job.codex_auth_job_use_case import (
     Stage3CodexAuthCompletedData,
     Stage4CodexAuthFailed,
     Stage4CodexAuthFailedData,
+    Stage5CodexAuthCancelled,
+    Stage5CodexAuthCancelledData,
 )
 from app.usecase.job.codex.ports import CodexAuthenticator
 
@@ -60,36 +65,41 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
         """Execute Codex device auth for one persisted job."""
         job = await self.jobs.get(job_id)
 
-        job.status = JobStatus.RUNNING
-        job.stage = Stage1StartingCodexDeviceAuth()
-        job.started_at = _now()
+        now = _now()
+        job.job_status = JobStatus.RUNNING
+        job.job_stage = Stage1StartingCodexDeviceAuth(updated_at=now)
+        job.started_at = now
+        job.updated_at = now
         await self.jobs.save(job)
         await self.job_events.append(
             Event1CodexAuthStarted(
-                job_id=job.id,
-                created_at=_now(),
+                created_at=now,
+                payload=Event1CodexAuthStartedPayload(
+                    job_id_issuer=job.job_id,
+                ),
             )
         )
 
         try:
             device_auth = await self.codex_authenticator.start_device_auth()
+            now = _now()
             waiting_stage = Stage2WaitingForUserLogin(
+                updated_at=now,
                 data=Stage2WaitingForUserLoginData(
                     verification_url=device_auth.verification_url,
-                    user_code=device_auth.user_code,
-                    device_code=device_auth.user_code,
+                    device_code=device_auth.device_code,
                 ),
             )
-            job.stage = waiting_stage
+            job.job_stage = waiting_stage
+            job.updated_at = now
             await self.jobs.save(job)
             await self.job_events.append(
-                Event2WaitingForUserLogin(
-                    job_id=job.id,
-                    created_at=_now(),
-                    data=Event2WaitingForUserLoginData(
+                Event2UserLoginRequested(
+                    created_at=now,
+                    payload=Event2UserLoginRequestedPayload(
+                        job_id_issuer=job.job_id,
                         verification_url=device_auth.verification_url,
-                        user_code=device_auth.user_code,
-                        device_code=device_auth.user_code,
+                        device_code=device_auth.device_code,
                     ),
                 )
             )
@@ -101,48 +111,82 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
             result_summary = CodexAuthJobResult(
                 authenticated=auth_result.authenticated,
                 verification_url=device_auth.verification_url,
-                user_code=device_auth.user_code,
-                device_code=device_auth.user_code,
+                device_code=device_auth.device_code,
                 error_message=auth_result.error_message,
             )
-            job.status = JobStatus.SUCCEEDED
-            job.stage = Stage3CodexAuthCompleted(
+            now = _now()
+            job.job_status = JobStatus.SUCCEEDED
+            job.job_stage = Stage3CodexAuthCompleted(
+                updated_at=now,
                 data=Stage3CodexAuthCompletedData(
                     authenticated=auth_result.authenticated,
                     error_message=auth_result.error_message,
                     verification_url=device_auth.verification_url,
-                    user_code=device_auth.user_code,
-                    device_code=device_auth.user_code,
+                    device_code=device_auth.device_code,
                 ),
             )
             job.result_summary = result_summary.to_dict()
-            job.finished_at = _now()
-            job.error = None
+            job.finished_at = now
+            job.updated_at = now
+            job.job_error = None
             await self.jobs.save(job)
             await self.job_events.append(
                 Event3CodexAuthSucceeded(
-                    job_id=job.id,
-                    created_at=_now(),
-                    data=Event3CodexAuthSucceededData(summary=result_summary),
+                    created_at=now,
+                    payload=Event3CodexAuthSucceededPayload(
+                        job_id_issuer=job.job_id,
+                        summary=result_summary,
+                    ),
                 )
             )
             return result_summary
+        except asyncio.CancelledError:
+            await self.codex_authenticator.cancel()
+            now = _now()
+            reason = "Job cancelled"
+            job.job_status = JobStatus.CANCELLED
+            job.job_error = JobError(
+                code="CancelledError",
+                message=reason,
+            )
+            job.job_stage = Stage5CodexAuthCancelled(
+                updated_at=now,
+                data=Stage5CodexAuthCancelledData(reason=reason),
+            )
+            job.finished_at = now
+            job.updated_at = now
+            await self.jobs.save(job)
+            await self.job_events.append(
+                Event5CodexAuthCancelled(
+                    created_at=now,
+                    payload=Event5CodexAuthCancelledPayload(
+                        job_id_issuer=job.job_id,
+                        reason=reason,
+                    ),
+                )
+            )
+            raise
         except Exception as exc:
-            job.status = JobStatus.FAILED
-            job.error = JobError(
+            now = _now()
+            job.job_status = JobStatus.FAILED
+            job.job_error = JobError(
                 code=type(exc).__name__,
                 message=str(exc),
             )
-            job.stage = Stage4CodexAuthFailed(
+            job.job_stage = Stage4CodexAuthFailed(
+                updated_at=now,
                 data=Stage4CodexAuthFailedData(error=str(exc)),
             )
-            job.finished_at = _now()
+            job.finished_at = now
+            job.updated_at = now
             await self.jobs.save(job)
             await self.job_events.append(
                 Event4CodexAuthFailed(
-                    job_id=job.id,
-                    created_at=_now(),
-                    data=Event4CodexAuthFailedData(error=str(exc)),
+                    created_at=now,
+                    payload=Event4CodexAuthFailedPayload(
+                        job_id_issuer=job.job_id,
+                        error=str(exc),
+                    ),
                 )
             )
             raise

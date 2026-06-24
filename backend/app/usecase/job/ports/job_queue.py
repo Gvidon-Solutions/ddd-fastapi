@@ -12,7 +12,11 @@ class JobQueue(ABC):
     @abstractmethod
     async def enqueue(
         self,
-        job_name: str,
+        job_type: str,
         job_id: UUID,
     ) -> None:
         """Enqueue a job for asynchronous execution."""
+
+    @abstractmethod
+    async def cancel(self, job_id: UUID) -> bool:
+        """Cancel an enqueued or running asynchronous job."""

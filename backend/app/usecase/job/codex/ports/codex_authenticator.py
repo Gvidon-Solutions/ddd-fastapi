@@ -17,3 +17,7 @@ class CodexAuthenticator(ABC):
     @abstractmethod
     async def await_for_user_login(self) -> CodexAuthResult:
         """Wait until the user completes Codex device auth."""
+
+    @abstractmethod
+    async def cancel(self) -> bool:
+        """Cancel the currently running Codex auth process."""

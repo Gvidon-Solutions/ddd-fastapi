@@ -31,22 +31,25 @@ class JobRepositoryImpl(JobRepository):
     async def save(self, job: Job) -> None:
         """Persist changes to an existing job."""
         job_dto = JobDTO.from_entity(job)
-        existing_job = await self.session.get(JobDTO, job.id)
+        existing_job = await self.session.get(JobDTO, job.job_id)
         if existing_job is None:
             self.session.add(job_dto)
             return
 
-        existing_job.name = job_dto.name
-        existing_job.input = job_dto.input
-        existing_job.status = job_dto.status
-        existing_job.stage = job_dto.stage
+        existing_job.job_type = job_dto.job_type
+        existing_job.job_name = job_dto.job_name
+        existing_job.job_description = job_dto.job_description
+        existing_job.job_input = job_dto.job_input
+        existing_job.job_status = job_dto.job_status
+        existing_job.job_stage = job_dto.job_stage
         existing_job.result_summary = job_dto.result_summary
         existing_job.root_initiator = job_dto.root_initiator
         existing_job.parent_job_id = job_dto.parent_job_id
         existing_job.requested_at = job_dto.requested_at
+        existing_job.updated_at = job_dto.updated_at
         existing_job.started_at = job_dto.started_at
         existing_job.finished_at = job_dto.finished_at
-        existing_job.error = job_dto.error
+        existing_job.job_error = job_dto.job_error
         self.session.add(existing_job)
 
 

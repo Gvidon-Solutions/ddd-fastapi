@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.infrastructure.codex import CodexExecutor
+from app.infrastructure.codex import CodexCliExecutor
 
 pytestmark = pytest.mark.anyio
 
@@ -90,7 +90,7 @@ async def test_codex_executor_runs_codex_exec_with_help_documented_flags(
         captured["process"] = process
         return process
 
-    executor = CodexExecutor(
+    executor = CodexCliExecutor(
         codex_cli_path="codex",
         model="gpt-5.5",
         sandbox_mode="workspace-write",
@@ -147,7 +147,7 @@ async def test_codex_executor_accepts_full_codex_exec_options(tmp_path: Path) ->
         captured["process"] = process
         return process
 
-    executor = CodexExecutor(
+    executor = CodexCliExecutor(
         codex_cli_path="codex",
         codex_home=tmp_path / ".codex_work_dir",
         process_factory=process_factory,
@@ -267,7 +267,7 @@ async def test_codex_executor_rejects_parallel_execs(tmp_path: Path) -> None:
     async def process_factory(*_args, **_kwargs):
         return process
 
-    executor = CodexExecutor(
+    executor = CodexCliExecutor(
         codex_home=tmp_path / ".codex_work_dir",
         process_factory=process_factory,
     )
@@ -294,7 +294,7 @@ async def test_codex_executor_cancel_terminates_running_process(tmp_path: Path) 
     async def process_factory(*_args, **_kwargs):
         return process
 
-    executor = CodexExecutor(
+    executor = CodexCliExecutor(
         codex_home=tmp_path / ".codex_work_dir",
         process_factory=process_factory,
     )
@@ -319,7 +319,7 @@ async def test_codex_executor_cancel_terminates_running_process(tmp_path: Path) 
 
 async def test_codex_executor_cancel_returns_false_when_idle(tmp_path: Path) -> None:
     # Arrange
-    executor = CodexExecutor(codex_home=tmp_path / ".codex_work_dir")
+    executor = CodexCliExecutor(codex_home=tmp_path / ".codex_work_dir")
 
     # Act / Assert
     assert executor.is_running() is False

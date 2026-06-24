@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .entities import Job, JobArtifact, JobEvent
+from .entities import Job, JobArtifact, JobEvent, JobEventPayload
 from .repositories import JobArtifactRepository, JobEventRepository, JobRepository
 from .value_objects import (
     Actor,
@@ -29,6 +29,7 @@ __all__ = (
     "JobArtifactRepository",
     "JobError",
     "JobEvent",
+    "JobEventPayload",
     "JobEventRepository",
     "JobEventType",
     "JobRepository",

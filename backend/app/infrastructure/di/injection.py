@@ -11,13 +11,12 @@ from app.domain.item.repositories import ItemRepository
 from app.domain.job import JobArtifactRepository, JobEventRepository, JobRepository
 from app.domain.user.repositories import UserRepository
 from app.infrastructure.arq import new_arq_job_queue
-from app.infrastructure.artifact_storage import new_filesystem_artifact_storage
-from app.infrastructure.clock import new_system_clock
+from app.infrastructure.job_artifact_storage import new_filesystem_job_artifact_storage
 from app.infrastructure.security import new_password_hasher
+from app.infrastructure.sqlmodel.event import new_job_event_repository
 from app.infrastructure.sqlmodel.item import new_item_repository
 from app.infrastructure.sqlmodel.job import (
     new_job_artifact_repository,
-    new_job_event_repository,
     new_job_repository,
 )
 from app.infrastructure.sqlmodel.user import new_user_repository
@@ -35,7 +34,6 @@ from app.usecase.item import (
 )
 from app.usecase.job import (
     ArtifactStorage,
-    Clock,
     JobQueue,
     LaunchJobUseCase,
     new_launch_job_use_case,
@@ -120,12 +118,7 @@ def get_job_queue() -> JobQueue:
 
 def get_artifact_storage() -> ArtifactStorage:
     """Provide artifact storage."""
-    return new_filesystem_artifact_storage()
-
-
-def get_clock() -> Clock:
-    """Provide a clock."""
-    return new_system_clock()
+    return new_filesystem_job_artifact_storage()
 
 
 def get_password_hasher() -> PasswordHasher:
@@ -144,13 +137,11 @@ def get_authenticate_user_use_case(
 def get_launch_job_use_case(
     jobs: JobRepository = Depends(get_job_repository),
     queue: JobQueue = Depends(get_job_queue),
-    clock: Clock = Depends(get_clock),
 ) -> LaunchJobUseCase:
     """Provide the launch-job use case."""
     return new_launch_job_use_case(
         jobs=jobs,
         queue=queue,
-        clock=clock,
     )
 
 

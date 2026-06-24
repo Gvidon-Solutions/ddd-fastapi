@@ -34,8 +34,7 @@ COPY backend/app/infrastructure/arq/__init__.py backend/app/infrastructure/arq/j
 COPY backend/app/infrastructure/arq/jobs app/infrastructure/arq/jobs
 COPY backend/app/infrastructure/arq/.codex_work_dir/.gitkeep app/infrastructure/arq/.codex_work_dir/.gitkeep
 COPY backend/app/infrastructure/arq/.codex_work_dir/.codex/config.toml app/infrastructure/arq/.codex_work_dir/.codex/config.toml
-COPY backend/app/infrastructure/artifact_storage app/infrastructure/artifact_storage
-COPY backend/app/infrastructure/clock app/infrastructure/clock
+COPY backend/app/infrastructure/job_artifact_storage app/infrastructure/job_artifact_storage
 COPY backend/app/infrastructure/codex app/infrastructure/codex
 COPY backend/app/infrastructure/sqlmodel/__init__.py backend/app/infrastructure/sqlmodel/datetime.py app/infrastructure/sqlmodel/
 COPY backend/app/infrastructure/sqlmodel/job app/infrastructure/sqlmodel/job

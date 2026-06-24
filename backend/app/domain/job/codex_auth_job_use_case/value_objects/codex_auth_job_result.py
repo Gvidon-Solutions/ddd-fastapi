@@ -11,7 +11,6 @@ class CodexAuthJobResult:
 
     authenticated: bool
     verification_url: str | None = None
-    user_code: str | None = None
     device_code: str | None = None
     error_message: str | None = None
 

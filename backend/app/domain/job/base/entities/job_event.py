@@ -1,21 +1,25 @@
-"""Define the JobEvent entity."""
+"""Define event entities."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from uuid import UUID
 
+from app.domain.event import Event
 from app.domain.job.base.value_objects import JobEventType
 
 
-@dataclass
-class JobEvent:
+@dataclass(kw_only=True)
+class JobEventPayload:
+    """Represent the job-specific payload for an emitted event."""
+
+    job_id_issuer: UUID
+    job_event_type: JobEventType
+    message: str | None
+
+
+@dataclass(kw_only=True)
+class JobEvent(Event):
     """Represent a historical event emitted by a job."""
 
-    id: UUID
-    job_id: UUID
-    type: JobEventType
-    data: dict
-    message: str | None
-    created_at: datetime
+    payload: JobEventPayload

@@ -6,6 +6,6 @@ __all__ = (
     "ItemDTO",
     "JobArtifactDTO",
     "JobDTO",
-    "JobEventDTO",
+    "EventDTO",
     "UserDTO",
 )

@@ -1,4 +1,4 @@
-"""Redis infrastructure adapters."""
+"""Expose event value objects."""
 
 from __future__ import annotations
 

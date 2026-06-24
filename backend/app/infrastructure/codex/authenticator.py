@@ -50,9 +50,9 @@ class CodexCliAuthenticator(CodexAuthenticator):
             parsed = parse_device_login_output(raw_output)
             self.device_auth = CodexDeviceAuth(
                 verification_url=parsed["verification_url"],
-                user_code=parsed["user_code"],
+                device_code=parsed["device_code"],
             )
-            if self.device_auth.verification_url and self.device_auth.user_code:
+            if self.device_auth.verification_url and self.device_auth.device_code:
                 return self.device_auth
 
         return_code = await self.process.wait()
@@ -77,20 +77,35 @@ class CodexCliAuthenticator(CodexAuthenticator):
             )
         return CodexAuthResult(authenticated=True)
 
+    async def cancel(self) -> bool:
+        """Cancel the currently running Codex auth process."""
+        process = self.process
+        if process is None or process.returncode is not None:
+            return False
+
+        process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5)
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+        self.process = None
+        return True
+
 
 def parse_device_login_output(output: str) -> dict[str, str | None]:
-    """Extract the verification URL and user code from Codex CLI output."""
+    """Extract the verification URL and device code from Codex CLI output."""
     url_match = _URL_PATTERN.search(output)
-    user_code = None
+    device_code = None
     for pattern in _CODE_PATTERNS:
         code_match = pattern.search(output)
         if code_match:
-            user_code = code_match.group(1)
+            device_code = code_match.group(1)
             break
 
     return {
         "verification_url": url_match.group(0) if url_match else None,
-        "user_code": user_code,
+        "device_code": device_code,
     }
 
 

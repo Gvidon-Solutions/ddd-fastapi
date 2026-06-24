@@ -6,24 +6,14 @@ import asyncio
 import json
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 from app.config import settings
+from app.usecase.job.codex import CodexExecResult, CodexExecutor
 
 
-@dataclass(frozen=True)
-class CodexExecResult:
-    """Represent one Codex exec subprocess result."""
-
-    return_code: int
-    output: str
-    stdout_lines: list[str]
-    stderr_lines: list[str]
-
-
-class CodexExecutor:
+class CodexCliExecutor(CodexExecutor):
     """Execute Codex CLI commands."""
 
     def __init__(
@@ -64,7 +54,7 @@ class CodexExecutor:
         process.terminate()
         try:
             await asyncio.wait_for(process.wait(), timeout=5)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             process.kill()
             await process.wait()
         return True
@@ -388,4 +378,4 @@ class CodexExecutor:
 
 def new_codex_executor() -> CodexExecutor:
     """Create a Codex CLI executor."""
-    return CodexExecutor()
+    return CodexCliExecutor()

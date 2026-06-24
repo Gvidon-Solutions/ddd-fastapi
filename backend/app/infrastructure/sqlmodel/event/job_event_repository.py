@@ -8,7 +8,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domain.job import JobEvent, JobEventRepository
-from app.infrastructure.sqlmodel.job.job_event_dto import JobEventDTO
+from app.infrastructure.sqlmodel.event.event_dto import EventDTO
 
 
 class JobEventRepositoryImpl(JobEventRepository):
@@ -20,14 +20,14 @@ class JobEventRepositoryImpl(JobEventRepository):
 
     async def append(self, event: JobEvent) -> None:
         """Append a new job event."""
-        self.session.add(JobEventDTO.from_entity(event))
+        self.session.add(EventDTO.from_job_event(event))
 
     async def list_by_job(self, job_id: UUID) -> list[JobEvent]:
         """Return events for a job."""
         statement = (
-            select(JobEventDTO)
-            .where(JobEventDTO.job_id == job_id)
-            .order_by(col(JobEventDTO.created_at).asc())
+            select(EventDTO)
+            .where(EventDTO.job_id_issuer == job_id)
+            .order_by(col(EventDTO.created_at).asc())
         )
         result = await self.session.exec(statement)
         return [event.to_entity() for event in result.all()]

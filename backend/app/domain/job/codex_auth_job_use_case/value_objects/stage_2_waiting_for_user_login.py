@@ -11,7 +11,6 @@ from app.domain.job.base.value_objects import JobStage
 class Stage2WaitingForUserLoginData:
     """Represent stage 2 data."""
     verification_url: str | None = None
-    user_code: str | None = None
     device_code: str | None = None
     status: str = "waiting_for_user"
 
@@ -25,7 +24,7 @@ class Stage2WaitingForUserLogin(JobStage):
     """Represent waiting for the user to complete Codex device auth."""
 
     key: str = "codex_auth"
-    message: str | None = "Open verification URL and enter user code"
+    message: str | None = "Open verification URL and enter device code"
     current: int | None = 2
     total: int | None = 4
     data: Stage2WaitingForUserLoginData = field(

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from app.domain.job import Actor, Job, JobRepository, JobStatus
-from app.usecase.job.ports import Clock, JobQueue
+from app.usecase.job.ports import JobQueue
 
 
 class LaunchJobUseCase(ABC):
@@ -15,9 +16,11 @@ class LaunchJobUseCase(ABC):
     @abstractmethod
     async def execute(
         self,
-        name: str,
+        job_type: str,
+        job_name: str,
         root_initiator: Actor,
-        input: dict | None = None,
+        job_description: str | None = None,
+        job_input: dict | None = None,
         parent_job_id: UUID | None = None,
     ) -> UUID:
         """Create a queued job, enqueue it, and return its ID."""
@@ -30,53 +33,60 @@ class LaunchJobUseCaseImpl(LaunchJobUseCase):
         self,
         jobs: JobRepository,
         queue: JobQueue,
-        clock: Clock,
     ):
         """Store use case dependencies."""
         self.jobs = jobs
         self.queue = queue
-        self.clock = clock
 
     async def execute(
         self,
-        name: str,
+        job_type: str,
+        job_name: str,
         root_initiator: Actor,
-        input: dict | None = None,
+        job_description: str | None = None,
+        job_input: dict | None = None,
         parent_job_id: UUID | None = None,
     ) -> UUID:
         """Create a queued job, enqueue it, and return its ID."""
+        now = _now()
         job = Job(
-            id=uuid4(),
-            name=name,
-            input=input,
-            status=JobStatus.QUEUED,
-            stage=None,
+            job_id=uuid4(),
+            job_type=job_type,
+            job_name=job_name,
+            job_description=job_description,
+            job_input=job_input,
+            job_status=JobStatus.QUEUED,
+            job_stage=None,
             result_summary=None,
             root_initiator=root_initiator,
             parent_job_id=parent_job_id,
-            requested_at=self.clock.now(),
+            requested_at=now,
+            updated_at=now,
             started_at=None,
             finished_at=None,
-            error=None,
+            job_error=None,
         )
 
         await self.jobs.create(job)
         await self.queue.enqueue(
-            job_name=job.name,
-            job_id=job.id,
+            job_type=job.job_type,
+            job_id=job.job_id,
         )
 
-        return job.id
+        return job.job_id
 
 
 def new_launch_job_use_case(
     jobs: JobRepository,
     queue: JobQueue,
-    clock: Clock,
 ) -> LaunchJobUseCase:
     """Instantiate the launch job use case."""
     return LaunchJobUseCaseImpl(
         jobs=jobs,
         queue=queue,
-        clock=clock,
     )
+
+
+def _now() -> datetime:
+    """Return the current UTC time."""
+    return datetime.now(UTC)
