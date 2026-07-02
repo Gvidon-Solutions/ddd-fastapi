@@ -7,15 +7,12 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from app.domain.job.base.entities import JobEvent, JobEventPayload
-from app.domain.job.base.value_objects import JobEventType
 
 
 @dataclass(kw_only=True)
 class Event1CodexAuthStartedPayload(JobEventPayload):
     """Represent event 1 payload."""
 
-    job_event_type: JobEventType = field(default=JobEventType.STARTED, init=False)
-    message: str | None = field(default="Started Codex device auth", init=False)
     stage: str = "codex_auth"
 
     def __getitem__(self, key: str):
@@ -42,5 +39,5 @@ class Event1CodexAuthStarted(JobEvent):
         return "codex_auth_job_use_case"
 
     def __post_init__(self) -> None:
-        """Set the event source to the issuing Codex auth job."""
-        self.source = f"{self.source_prefix()}/{self.payload.job_id_issuer}"
+        """Set the event source."""
+        self.source = self.source_prefix()

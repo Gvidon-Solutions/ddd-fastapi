@@ -27,7 +27,7 @@ async def cancel_job(
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job.root_initiator.id != str(current_user.id):
+    if job.initiator.external_id != str(current_user.id):
         raise HTTPException(status_code=403, detail="Job access denied")
 
     cancelled = await use_case.execute(job_id)

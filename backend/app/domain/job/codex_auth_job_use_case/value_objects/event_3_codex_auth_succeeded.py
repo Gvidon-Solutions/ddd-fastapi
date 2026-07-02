@@ -7,7 +7,6 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from app.domain.job.base.entities import JobEvent, JobEventPayload
-from app.domain.job.base.value_objects import JobEventType
 from app.domain.job.codex_auth_job_use_case.value_objects.contracts import (
     CodexAuthJobResult,
 )
@@ -17,8 +16,6 @@ from app.domain.job.codex_auth_job_use_case.value_objects.contracts import (
 class Event3CodexAuthSucceededPayload(JobEventPayload):
     """Represent event 3 payload."""
 
-    job_event_type: JobEventType = field(default=JobEventType.SUCCEEDED, init=False)
-    message: str | None = field(default="Codex auth completed", init=False)
     summary: CodexAuthJobResult
 
     def __getitem__(self, key: str):
@@ -45,5 +42,5 @@ class Event3CodexAuthSucceeded(JobEvent):
         return "codex_auth_job_use_case"
 
     def __post_init__(self) -> None:
-        """Set the event source to the issuing Codex auth job."""
-        self.source = f"{self.source_prefix()}/{self.payload.job_id_issuer}"
+        """Set the event source."""
+        self.source = self.source_prefix()

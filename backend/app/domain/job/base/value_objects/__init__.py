@@ -2,27 +2,24 @@
 
 from __future__ import annotations
 
-from .actor import Actor, Initiator
+from .actor import Initiator
 from .actor_type import ActorType
-from .artifact_kind import ArtifactKind
-from .artifact_location import ArtifactLocation
-from .artifact_location_type import ArtifactLocationType
-from .artifact_role import ArtifactRole
+from .file_kind import FileKind
+from .file_location import FileLocation
+from .file_location_type import FileLocationType
+from .file_status import FileStatus
 from .job_error import JobError
-from .job_event_type import JobEventType
-from .job_stage import JobStage
+from .job_file_role import JobFileRole
 from .job_status import JobStatus
 
 __all__ = (
-    "Actor",
     "Initiator",
     "ActorType",
-    "ArtifactKind",
-    "ArtifactLocation",
-    "ArtifactLocationType",
-    "ArtifactRole",
+    "FileKind",
+    "FileLocation",
+    "FileLocationType",
+    "FileStatus",
     "JobError",
-    "JobEventType",
-    "JobStage",
+    "JobFileRole",
     "JobStatus",
 )

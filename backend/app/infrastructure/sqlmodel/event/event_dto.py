@@ -7,11 +7,11 @@ from dataclasses import asdict, fields, is_dataclass
 from datetime import datetime
 from typing import TypeVar, get_type_hints
 
-from sqlalchemy import JSON, Column, DateTime
+from sqlalchemy import JSON, Column, DateTime, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.domain.event import Event, get_event_class
-from app.domain.job import JobEvent, JobEventPayload, JobEventType
+from app.domain.job import JobEvent, JobEventPayload
 from app.infrastructure.sqlmodel.datetime import ensure_datetime_utc, get_datetime_utc
 
 EventT = TypeVar("EventT", bound=Event)
@@ -26,13 +26,6 @@ class EventDTO(SQLModel, table=True):
     type: str = Field(max_length=255, index=True)
     source: str = Field(max_length=255, index=True)
     version: str = Field(max_length=32)
-    job_id_issuer: uuid.UUID | None = Field(
-        default=None,
-        foreign_key="job.job_id",
-        index=True,
-    )
-    job_event_type: str | None = Field(default=None, max_length=64, index=True)
-    message: str | None = Field(default=None)
     payload: dict = Field(
         default_factory=dict,
         sa_column=Column("payload", JSON, nullable=False),
@@ -62,33 +55,20 @@ class EventDTO(SQLModel, table=True):
 
     def to_job_event(self) -> JobEvent:
         """Convert this persistence DTO to a base job event domain entity."""
-        if self.job_id_issuer is None:
-            raise ValueError("Job event requires job_id_issuer")
-        if self.job_event_type is None:
-            raise ValueError("Job event requires job_event_type")
         return JobEvent(
             event_id=self.event_id,
             type=self.type,
             source=self.source,
             version=self.version,
             created_at=ensure_datetime_utc(self.created_at or get_datetime_utc()),
-            payload=JobEventPayload(
-                job_id_issuer=self.job_id_issuer,
-                job_event_type=JobEventType(self.job_event_type),
-                message=self.message,
-            ),
+            payload=JobEventPayload(),
         )
 
     def _typed_payload(self, event_class: type[EventT]) -> JobEventPayload:
         payload_type = get_type_hints(event_class)["payload"]
         if not is_dataclass(payload_type):
             raise TypeError("Event payload type must be a dataclass")
-        payload_kwargs = {
-            "job_id_issuer": self._job_id_issuer(),
-            "job_event_type": self._job_event_type(),
-            "message": self.message,
-            **self.payload,
-        }
+        payload_kwargs = self.payload
         type_hints = get_type_hints(payload_type)
         init_kwargs = {}
         for payload_field in fields(payload_type):
@@ -101,16 +81,6 @@ class EventDTO(SQLModel, table=True):
             )
         return payload_type(**init_kwargs)
 
-    def _job_id_issuer(self) -> uuid.UUID:
-        if self.job_id_issuer is None:
-            raise ValueError("Job event requires job_id_issuer")
-        return self.job_id_issuer
-
-    def _job_event_type(self) -> JobEventType:
-        if self.job_event_type is None:
-            raise ValueError("Job event requires job_event_type")
-        return JobEventType(self.job_event_type)
-
     @staticmethod
     def from_job_event(event: JobEvent) -> EventDTO:
         """Build a persistence DTO from a job event domain entity."""
@@ -119,9 +89,6 @@ class EventDTO(SQLModel, table=True):
             type=event.type,
             source=event.source,
             version=event.version,
-            job_id_issuer=event.payload.job_id_issuer,
-            job_event_type=event.payload.job_event_type.value,
-            message=event.payload.message,
             payload=_payload_to_record(event.payload),
             created_at=event.created_at,
         )
@@ -134,15 +101,30 @@ def _data_to_record(data):
 
 
 def _payload_to_record(payload: JobEventPayload) -> dict:
-    payload_record = _data_to_record(payload)
-    return {
-        key: value
-        for key, value in payload_record.items()
-        if key not in {"job_id_issuer", "job_event_type", "message"}
-    }
+    return _data_to_record(payload)
 
 
 def _coerce_value(value, target_type):
     if is_dataclass(target_type) and isinstance(value, dict):
         return target_type(**value)
     return value
+
+
+class JobEventLinkDTO(SQLModel, table=True):
+    """Link an event to the job timeline that emitted it."""
+
+    __tablename__ = "job_event"
+    __table_args__ = (
+        UniqueConstraint("job_id", "event_id", "relation"),
+        UniqueConstraint("job_id", "sequence"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    job_id: uuid.UUID = Field(foreign_key="job.job_id", index=True)
+    event_id: uuid.UUID = Field(foreign_key="event.event_id", index=True)
+    relation: str = Field(default="emitted", max_length=64)
+    sequence: int = Field(index=True)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )

@@ -18,7 +18,7 @@ from .ports import (
     CodexAuthSessionStatus,
     CodexAuthSessionStore,
     CodexExecFailedError,
-    CodexExecLogArtifact,
+    CodexExecLogFile,
     CodexExecResult,
     CodexExecutor,
 )
@@ -30,7 +30,7 @@ __all__ = (
     "CodexAuthSessionStore",
     "CodexAuthenticator",
     "CodexExecFailedError",
-    "CodexExecLogArtifact",
+    "CodexExecLogFile",
     "CodexExecResult",
     "CodexExecutor",
     "CodexRunJobUseCase",

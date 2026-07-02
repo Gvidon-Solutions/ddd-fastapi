@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from .job_artifact_repository import JobArtifactRepository
+from .file_repository import FileRepository
 from .job_event_repository import JobEventRepository
+from .job_file_repository import JobFileRepository
+from .job_query_repository import JobDetailProjection, JobQueryRepository, JobSummary
 from .job_repository import JobExecutionRecord, JobRepository
 
 __all__ = (
-    "JobArtifactRepository",
+    "FileRepository",
     "JobEventRepository",
+    "JobFileRepository",
+    "JobDetailProjection",
     "JobExecutionRecord",
+    "JobQueryRepository",
     "JobRepository",
+    "JobSummary",
 )

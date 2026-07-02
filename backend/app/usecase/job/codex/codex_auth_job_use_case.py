@@ -26,15 +26,6 @@ from app.domain.job.codex_auth_job_use_case import (
     Event4CodexAuthFailedPayload,
     Event5CodexAuthCancelled,
     Event5CodexAuthCancelledPayload,
-    Stage1StartingCodexDeviceAuth,
-    Stage2WaitingForUserLogin,
-    Stage2WaitingForUserLoginData,
-    Stage3CodexAuthCompleted,
-    Stage3CodexAuthCompletedData,
-    Stage4CodexAuthFailed,
-    Stage4CodexAuthFailedData,
-    Stage5CodexAuthCancelled,
-    Stage5CodexAuthCancelledData,
 )
 from app.usecase.job.codex.ports import CodexAuthenticator, CodexAuthSessionStore
 
@@ -68,18 +59,15 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
         job = await self.jobs.get(job_id)
 
         now = _now()
-        job.job_status = JobStatus.RUNNING
-        job.job_stage = Stage1StartingCodexDeviceAuth(updated_at=now)
+        job.status = JobStatus.RUNNING
         job.started_at = now
         job.updated_at = now
-        await self.jobs.save(job)
         await self.job_events.append(
+            job.id,
             Event1CodexAuthStarted(
                 created_at=now,
-                payload=Event1CodexAuthStartedPayload(
-                    job_id_issuer=job.job_id,
-                ),
-            )
+                payload=Event1CodexAuthStartedPayload(),
+            ),
         )
 
         try:
@@ -87,120 +75,92 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
             now = _now()
             if self.auth_sessions is not None:
                 await self.auth_sessions.save_pending(
-                    job_id=job.job_id,
+                    job_id=job.id,
                     verification_url=device_auth.verification_url,
                     user_code=device_auth.device_code,
                     expires_at=now + timedelta(minutes=10),
                 )
-            waiting_stage = Stage2WaitingForUserLogin(
-                updated_at=now,
-                data=Stage2WaitingForUserLoginData(
-                    verification_url=device_auth.verification_url,
-                    device_code=device_auth.device_code,
-                ),
-            )
-            job.job_stage = waiting_stage
             job.updated_at = now
             await self.jobs.save(job)
             await self.job_events.append(
+                job.id,
                 Event2UserLoginRequested(
                     created_at=now,
-                    payload=Event2UserLoginRequestedPayload(
-                        job_id_issuer=job.job_id,
-                        verification_url=device_auth.verification_url,
-                        device_code=device_auth.device_code,
-                    ),
-                )
+                    payload=Event2UserLoginRequestedPayload(),
+                ),
             )
 
             auth_result = await self.codex_authenticator.await_for_user_login()
             if not auth_result.authenticated:
                 raise RuntimeError(_auth_error_message(auth_result))
 
-            result_summary = CodexAuthJobResult(
+            result_payload = CodexAuthJobResult(
                 authenticated=auth_result.authenticated,
                 error_message=auth_result.error_message,
             )
             now = _now()
-            job.job_status = JobStatus.SUCCEEDED
-            job.job_stage = Stage3CodexAuthCompleted(
-                updated_at=now,
-                data=Stage3CodexAuthCompletedData(
-                    authenticated=auth_result.authenticated,
-                    error_message=auth_result.error_message,
-                    verification_url=device_auth.verification_url,
-                    device_code=device_auth.device_code,
-                ),
-            )
-            job.result = result_summary
+            job.status = JobStatus.SUCCEEDED
+            job.result = result_payload
             job.finished_at = now
             job.updated_at = now
-            job.job_error = None
-            if await _mark_succeeded(self.jobs, job, result_summary, now):
+            job.error = None
+            if await _mark_succeeded(self.jobs, job, result_payload, now):
                 if self.auth_sessions is not None:
-                    await self.auth_sessions.mark_authenticated(job.job_id)
+                    await self.auth_sessions.mark_authenticated(job.id)
                 await self.job_events.append(
+                    job.id,
                     Event3CodexAuthSucceeded(
                         created_at=now,
                         payload=Event3CodexAuthSucceededPayload(
-                            job_id_issuer=job.job_id,
-                            summary=result_summary,
+                            summary=result_payload,
                         ),
-                    )
+                    ),
                 )
-            return result_summary
+            return result_payload
         except asyncio.CancelledError:
             await self.codex_authenticator.cancel()
             now = _now()
             reason = "Job cancelled"
-            job.job_status = JobStatus.CANCELLED
-            job.job_error = JobError(
+            job.status = JobStatus.CANCELLED
+            job.error = JobError(
                 code="CancelledError",
                 message=reason,
             )
-            job.job_stage = Stage5CodexAuthCancelled(
-                updated_at=now,
-                data=Stage5CodexAuthCancelledData(reason=reason),
-            )
             job.finished_at = now
             job.updated_at = now
-            if await _mark_cancelled(self.jobs, job, job.job_error, now):
+            if await _mark_cancelled(self.jobs, job, job.error, now):
                 if self.auth_sessions is not None:
-                    await self.auth_sessions.mark_cancelled(job.job_id, reason)
+                    await self.auth_sessions.mark_cancelled(job.id, reason)
                 await self.job_events.append(
+                    job.id,
                     Event5CodexAuthCancelled(
                         created_at=now,
                         payload=Event5CodexAuthCancelledPayload(
-                            job_id_issuer=job.job_id,
                             reason=reason,
                         ),
-                    )
+                    ),
                 )
             raise
         except Exception as exc:
             now = _now()
-            job.job_status = JobStatus.FAILED
-            job.job_error = JobError(
+            job.status = JobStatus.FAILED
+            job.error = JobError(
                 code=type(exc).__name__,
                 message=str(exc),
             )
-            job.job_stage = Stage4CodexAuthFailed(
-                updated_at=now,
-                data=Stage4CodexAuthFailedData(error=str(exc)),
-            )
             job.finished_at = now
             job.updated_at = now
-            if await _mark_failed(self.jobs, job, job.job_error, now):
+            if await _mark_failed(self.jobs, job, job.error, now):
                 if self.auth_sessions is not None:
-                    await self.auth_sessions.mark_failed(job.job_id, str(exc))
+                    await self.auth_sessions.mark_failed(job.id, str(exc))
                 await self.job_events.append(
+                    job.id,
                     Event4CodexAuthFailed(
                         created_at=now,
                         payload=Event4CodexAuthFailedPayload(
-                            job_id_issuer=job.job_id,
                             error=str(exc),
                         ),
-                    )
+                    ),
                 )
             raise
 
@@ -238,7 +198,7 @@ async def _mark_succeeded(
 ) -> bool:
     try:
         return await jobs.try_mark_succeeded(
-            job.job_id,
+            job.id,
             result=result,
             finished_at=finished_at,
         )
@@ -255,7 +215,7 @@ async def _mark_failed(
 ) -> bool:
     try:
         return await jobs.try_mark_failed(
-            job.job_id,
+            job.id,
             error=error,
             finished_at=finished_at,
         )
@@ -272,7 +232,7 @@ async def _mark_cancelled(
 ) -> bool:
     try:
         return await jobs.try_mark_cancelled(
-            job.job_id,
+            job.id,
             error=error,
             finished_at=finished_at,
         )

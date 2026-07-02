@@ -8,16 +8,22 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.domain.item.repositories import ItemRepository
-from app.domain.job import JobArtifactRepository, JobEventRepository, JobRepository
+from app.domain.job import (
+    JobEventRepository,
+    JobFileRepository,
+    JobQueryRepository,
+    JobRepository,
+)
 from app.domain.user.repositories import UserRepository
 from app.infrastructure.arq import new_arq_job_queue, new_redis_job_cancellation_backend
 from app.infrastructure.codex import new_redis_codex_auth_session_store
-from app.infrastructure.job_artifact_storage import new_filesystem_job_artifact_storage
+from app.infrastructure.file_storage import new_filesystem_file_storage
 from app.infrastructure.security import new_password_hasher
 from app.infrastructure.sqlmodel.event import new_job_event_repository
 from app.infrastructure.sqlmodel.item import new_item_repository
 from app.infrastructure.sqlmodel.job import (
-    new_job_artifact_repository,
+    new_job_file_repository,
+    new_job_query_repository,
     new_job_repository,
 )
 from app.infrastructure.sqlmodel.user import new_user_repository
@@ -34,16 +40,16 @@ from app.usecase.item import (
     new_update_item_use_case,
 )
 from app.usecase.job import (
-    ArtifactStorage,
     CancelJobUseCase,
     CodexAuthSessionStore,
+    FileStorage,
     GetCodexAuthCodeAndUrlUseCase,
     JobCancellationBackend,
+    JobLauncher,
     JobQueue,
-    LaunchJobUseCase,
     new_cancel_job_use_case,
     new_get_codex_auth_code_and_url_use_case,
-    new_launch_job_use_case,
+    new_job_launcher,
 )
 from app.usecase.user import (
     AuthenticateUserUseCase,
@@ -104,11 +110,18 @@ def get_job_repository(
     return new_job_repository(session)
 
 
-def get_job_artifact_repository(
+def get_job_file_repository(
     session: AsyncSession = Depends(get_session),
-) -> JobArtifactRepository:
-    """Provide a job artifact repository."""
-    return new_job_artifact_repository(session)
+) -> JobFileRepository:
+    """Provide a job-file repository."""
+    return new_job_file_repository(session)
+
+
+def get_job_query_repository(
+    session: AsyncSession = Depends(get_session),
+) -> JobQueryRepository:
+    """Provide a job query repository."""
+    return new_job_query_repository(session)
 
 
 def get_job_event_repository(
@@ -128,9 +141,9 @@ def get_job_cancellation_backend() -> JobCancellationBackend:
     return new_redis_job_cancellation_backend()
 
 
-def get_artifact_storage() -> ArtifactStorage:
-    """Provide artifact storage."""
-    return new_filesystem_job_artifact_storage()
+def get_file_storage() -> FileStorage:
+    """Provide file storage."""
+    return new_filesystem_file_storage()
 
 
 def get_codex_auth_session_store() -> CodexAuthSessionStore:
@@ -151,15 +164,13 @@ def get_authenticate_user_use_case(
     return new_authenticate_user_use_case(user_repository, password_hasher)
 
 
-def get_launch_job_use_case(
+def get_job_launcher(
     session: AsyncSession = Depends(get_session),
     jobs: JobRepository = Depends(get_job_repository),
-    queue: JobQueue = Depends(get_job_queue),
-) -> LaunchJobUseCase:
-    """Provide the launch-job use case."""
-    return new_launch_job_use_case(
+) -> JobLauncher:
+    """Provide the typed job launcher."""
+    return new_job_launcher(
         jobs=jobs,
-        queue=queue,
         session=session,
     )
 
@@ -278,13 +289,25 @@ def get_update_user_use_case(
 
 def get_delete_current_user_use_case(
     user_repository: UserRepository = Depends(get_user_repository),
+    job_repository: JobRepository = Depends(get_job_repository),
+    job_query_repository: JobQueryRepository = Depends(get_job_query_repository),
 ) -> DeleteCurrentUserUseCase:
     """Provide the current-user delete use case."""
-    return new_delete_current_user_use_case(user_repository)
+    return new_delete_current_user_use_case(
+        user_repository,
+        job_repository=job_repository,
+        job_query_repository=job_query_repository,
+    )
 
 
 def get_delete_user_use_case(
     user_repository: UserRepository = Depends(get_user_repository),
+    job_repository: JobRepository = Depends(get_job_repository),
+    job_query_repository: JobQueryRepository = Depends(get_job_query_repository),
 ) -> DeleteUserUseCase:
     """Provide the admin delete-user use case."""
-    return new_delete_user_use_case(user_repository)
+    return new_delete_user_use_case(
+        user_repository,
+        job_repository=job_repository,
+        job_query_repository=job_query_repository,
+    )

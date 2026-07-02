@@ -8,7 +8,8 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
-from app.domain.job import Actor, ActorType, Job, JobRepository, JobStatus
+from app.domain.job import ActorType, Initiator, Job, JobRepository, JobStatus
+from app.domain.job.codex_run_job_use_case import CodexRunInputV1
 from app.infrastructure.di import get_cancel_job_use_case, get_job_repository
 from app.main import app
 from app.presentation.api.common.deps import get_current_user
@@ -26,7 +27,7 @@ class FakeJobRepository(JobRepository):
 
     async def create(self, job: Job) -> None:
         """Create a job."""
-        self.jobs[job.job_id] = job
+        self.jobs[job.id] = job
 
     async def get(self, job_id: UUID) -> Job:
         """Return a job."""
@@ -36,7 +37,7 @@ class FakeJobRepository(JobRepository):
 
     async def save(self, job: Job) -> None:
         """Save a job."""
-        self.jobs[job.job_id] = job
+        self.jobs[job.id] = job
 
 
 class FakeCancelJobUseCase(CancelJobUseCase):
@@ -55,21 +56,21 @@ class FakeCancelJobUseCase(CancelJobUseCase):
 def _job(job_id: UUID, user_id: str) -> Job:
     now = datetime(2026, 6, 24, tzinfo=UTC)
     return Job(
-        job_id=job_id,
-        job_type="codex_run",
-        job_name="Codex run",
-        job_description=None,
-        job_input=None,
-        job_status=JobStatus.QUEUED,
-        job_stage=None,
-        result_summary=None,
-        root_initiator=Actor(type=ActorType.USER, id=user_id),
+        id=job_id,
+        type="codex.run",
+        version="v1",
+        name="Codex run",
+        description=None,
+        input=CodexRunInputV1(prompt="run"),
+        result=None,
+        status=JobStatus.QUEUED,
+        initiator=Initiator(type=ActorType.USER, external_id=user_id),
         parent_job_id=None,
         requested_at=now,
         updated_at=now,
         started_at=None,
         finished_at=None,
-        job_error=None,
+        error=None,
     )
 
 

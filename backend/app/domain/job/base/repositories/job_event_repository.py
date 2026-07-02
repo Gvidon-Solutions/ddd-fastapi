@@ -12,7 +12,7 @@ class JobEventRepository(ABC):
     """Persist job events."""
 
     @abstractmethod
-    async def append(self, event: JobEvent) -> None:
+    async def append(self, job_id: UUID, event: JobEvent) -> None:
         """Append a new job event."""
 
     @abstractmethod

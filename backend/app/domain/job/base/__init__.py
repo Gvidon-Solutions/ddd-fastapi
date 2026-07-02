@@ -2,59 +2,70 @@
 
 from __future__ import annotations
 
-from .entities import AnyJob, Job, JobArtifact, JobEvent, JobEventPayload
+from .entities import AnyJob, File, Job, JobEvent, JobEventPayload, JobFile
 from .exceptions import (
     DuplicateJobContractError,
+    JobDeleteError,
+    JobDeleteNotAllowedError,
+    JobHasChildrenError,
     JobSerializationError,
     UnknownJobContractError,
 )
 from .job_contract import JobContract
 from .job_registry import JobRegistry, job_registry
 from .repositories import (
-    JobArtifactRepository,
+    FileRepository,
+    JobDetailProjection,
     JobEventRepository,
     JobExecutionRecord,
+    JobFileRepository,
+    JobQueryRepository,
     JobRepository,
+    JobSummary,
 )
 from .serialization import deserialize_json, serialize_json
 from .value_objects import (
-    Actor,
     ActorType,
-    ArtifactKind,
-    ArtifactLocation,
-    ArtifactLocationType,
-    ArtifactRole,
+    FileKind,
+    FileLocation,
+    FileLocationType,
+    FileStatus,
     Initiator,
     JobError,
-    JobEventType,
-    JobStage,
+    JobFileRole,
     JobStatus,
 )
 
 __all__ = (
     "AnyJob",
-    "Actor",
     "ActorType",
     "DuplicateJobContractError",
-    "ArtifactKind",
-    "ArtifactLocation",
-    "ArtifactLocationType",
-    "ArtifactRole",
+    "JobDeleteError",
+    "JobDeleteNotAllowedError",
+    "JobHasChildrenError",
+    "File",
+    "FileKind",
+    "FileLocation",
+    "FileLocationType",
+    "FileRepository",
+    "FileStatus",
     "Initiator",
     "Job",
-    "JobArtifact",
-    "JobArtifactRepository",
     "JobContract",
     "JobError",
     "JobEvent",
     "JobEventPayload",
     "JobEventRepository",
-    "JobEventType",
+    "JobDetailProjection",
     "JobExecutionRecord",
+    "JobFile",
+    "JobFileRepository",
+    "JobFileRole",
+    "JobQueryRepository",
     "JobRepository",
+    "JobSummary",
     "JobRegistry",
     "JobSerializationError",
-    "JobStage",
     "JobStatus",
     "UnknownJobContractError",
     "deserialize_json",

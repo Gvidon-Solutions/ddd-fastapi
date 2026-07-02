@@ -12,10 +12,10 @@ from app.config import settings
 from app.domain.job import JobRepository
 from app.domain.job.codex_run_job_use_case import CodexRunJobV1
 from app.infrastructure.arq.deps import (
-    ARQ_ARTIFACT_STORAGE,
+    ARQ_FILE_STORAGE,
     get_arq_db_engine,
-    new_arq_job_artifact_repository,
     new_arq_job_event_repository,
+    new_arq_job_file_repository,
     new_arq_job_repository,
 )
 from app.infrastructure.arq.job_workers import job_worker
@@ -37,8 +37,8 @@ async def codex_run(
                 return {}
             use_case = new_codex_run_job_use_case(
                 jobs=jobs,
-                artifacts=new_arq_job_artifact_repository(session),
-                storage=ctx[ARQ_ARTIFACT_STORAGE],
+                job_files=new_arq_job_file_repository(session),
+                storage=ctx[ARQ_FILE_STORAGE],
                 job_events=new_arq_job_event_repository(session),
                 codex_executor=new_codex_executor(),
                 default_working_directory=Path(settings.CODEX_JOB_WORKING_DIRECTORY),

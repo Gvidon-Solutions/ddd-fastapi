@@ -20,8 +20,8 @@ class CodexRunInputV1:
 class CodexRunResultV1:
     """Successful result for a Codex run job."""
 
-    log_artifacts: int
-    generated_artifacts: int
+    log_files: int
+    generated_files: int
 
 
 @job_registry.register

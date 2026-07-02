@@ -7,20 +7,13 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from app.domain.job.base.entities import JobEvent, JobEventPayload
-from app.domain.job.base.value_objects import JobEventType
 
 
 @dataclass(kw_only=True)
 class Event4CodexRunFailedPayload(JobEventPayload):
     """Represent Codex run failed payload."""
 
-    job_event_type: JobEventType = field(default=JobEventType.FAILED, init=False)
-    message: str | None = field(init=False)
     error: str
-
-    def __post_init__(self) -> None:
-        """Set the failure message."""
-        self.message = self.error
 
     def __getitem__(self, key: str):
         """Return a field value by key."""
@@ -46,5 +39,5 @@ class Event4CodexRunFailed(JobEvent):
         return "codex_run"
 
     def __post_init__(self) -> None:
-        """Set the event source to the issuing Codex run job."""
-        self.source = f"{self.source_prefix()}/{self.payload.job_id_issuer}"
+        """Set the event source."""
+        self.source = self.source_prefix()

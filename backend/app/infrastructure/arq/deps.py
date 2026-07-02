@@ -9,19 +9,17 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domain.job import (
     Job,
-    JobArtifact,
     JobEvent,
+    JobFile,
 )
 from app.infrastructure.sqlmodel.event.job_event_repository import (
     JobEventRepositoryImpl,
 )
-from app.infrastructure.sqlmodel.job.job_artifact_repository import (
-    JobArtifactRepositoryImpl,
-)
+from app.infrastructure.sqlmodel.job.job_file_repository import JobFileRepositoryImpl
 from app.infrastructure.sqlmodel.job.job_repository import JobRepositoryImpl
 
 ARQ_DB_ENGINE = "db_engine"
-ARQ_ARTIFACT_STORAGE = "artifact_storage"
+ARQ_FILE_STORAGE = "file_storage"
 ARQ_CODEX_AUTHENTICATOR = "codex_authenticator"
 ARQ_CODEX_AUTH_SESSION = "codex_auth_session"
 
@@ -64,21 +62,21 @@ class AutocommitJobRepository(JobRepositoryImpl):
         return result
 
 
-class AutocommitJobArtifactRepository(JobArtifactRepositoryImpl):
-    """Job artifact repository that commits every write."""
+class AutocommitJobFileRepository(JobFileRepositoryImpl):
+    """Job file repository that commits every write."""
 
-    async def create(self, artifact: JobArtifact) -> None:
-        """Create and commit an artifact."""
-        await super().create(artifact)
+    async def create(self, job_file: JobFile) -> None:
+        """Create and commit a job-file association."""
+        await super().create(job_file)
         await self.session.commit()
 
 
 class AutocommitJobEventRepository(JobEventRepositoryImpl):
     """Job event repository that commits every append."""
 
-    async def append(self, event: JobEvent) -> None:
+    async def append(self, job_id, event: JobEvent) -> None:
         """Append and commit an event."""
-        await super().append(event)
+        await super().append(job_id, event)
         await self.session.commit()
 
 
@@ -92,11 +90,11 @@ def new_arq_job_repository(session: AsyncSession) -> AutocommitJobRepository:
     return AutocommitJobRepository(session)
 
 
-def new_arq_job_artifact_repository(
+def new_arq_job_file_repository(
     session: AsyncSession,
-) -> AutocommitJobArtifactRepository:
-    """Create an ARQ job artifact repository."""
-    return AutocommitJobArtifactRepository(session)
+) -> AutocommitJobFileRepository:
+    """Create an ARQ job file repository."""
+    return AutocommitJobFileRepository(session)
 
 
 def new_arq_job_event_repository(session: AsyncSession) -> AutocommitJobEventRepository:

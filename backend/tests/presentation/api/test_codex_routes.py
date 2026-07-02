@@ -7,17 +7,16 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
-from app.domain.job import Actor, ActorType
-from app.domain.job.codex_auth_job_use_case import CodexDeviceAuth
+from app.domain.job import Job
+from app.domain.job.codex_auth_job_use_case import CodexAuthInputV1, CodexDeviceAuth
+from app.domain.job.codex_run_job_use_case import CodexRunInputV1
 from app.infrastructure.di import (
     get_codex_auth_code_and_url_use_case,
-    get_launch_job_use_case,
+    get_job_launcher,
 )
 from app.main import app
 from app.presentation.api.codex import CodexRunCreate
 from app.presentation.api.codex.routes.codex import (
-    CODEX_AUTH_JOB_TYPE,
-    CODEX_RUN_JOB_TYPE,
     get_codex_auth_code_and_url,
     launch_codex_auth,
     launch_codex_run,
@@ -28,39 +27,22 @@ from app.usecase.job import (
     CodexAuthCodeJobNotFoundError,
     CodexAuthCodeJobTypeError,
     GetCodexAuthCodeAndUrlUseCase,
-    LaunchJobUseCase,
+    JobLauncher,
 )
 
 pytestmark = pytest.mark.anyio
 
 
-class FakeLaunchJobUseCase(LaunchJobUseCase):
-    """Capture launched jobs."""
+class FakeJobLauncher(JobLauncher):
+    """Capture launched typed jobs."""
 
     def __init__(self) -> None:
         self.job_id = UUID("11111111-1111-1111-1111-111111111111")
-        self.calls: list[dict] = []
+        self.jobs: list[Job] = []
 
-    async def execute(
-        self,
-        job_type: str,
-        job_name: str,
-        root_initiator: Actor,
-        job_description: str | None = None,
-        job_input: dict | None = None,
-        parent_job_id: UUID | None = None,
-    ) -> UUID:
+    async def launch(self, job: Job) -> UUID:
         """Record a launched job."""
-        self.calls.append(
-            {
-                "job_type": job_type,
-                "job_name": job_name,
-                "root_initiator": root_initiator,
-                "job_description": job_description,
-                "job_input": job_input,
-                "parent_job_id": parent_job_id,
-            }
-        )
+        self.jobs.append(job)
         return self.job_id
 
 
@@ -89,51 +71,38 @@ class FakeGetCodexAuthCodeAndUrlUseCase(GetCodexAuthCodeAndUrlUseCase):
 
 
 async def test_launch_codex_auth_queues_auth_job(user) -> None:
-    use_case = FakeLaunchJobUseCase()
+    launcher = FakeJobLauncher()
 
-    result = await launch_codex_auth(current_user=user, use_case=use_case)
+    result = await launch_codex_auth(current_user=user, launcher=launcher)
 
-    assert result.job_id == use_case.job_id
-    assert use_case.calls == [
-        {
-            "job_type": CODEX_AUTH_JOB_TYPE,
-            "job_name": "Codex auth",
-            "root_initiator": Actor(
-                type=ActorType.USER,
-                id=str(user.id),
-                display_name=user.email.value,
-            ),
-            "job_description": "Authenticate Codex through device login",
-            "job_input": None,
-            "parent_job_id": None,
-        }
-    ]
+    assert result.job_id == launcher.job_id
+    assert len(launcher.jobs) == 1
+    job = launcher.jobs[0]
+    assert job.type == "codex.auth"
+    assert job.name == "Codex auth"
+    assert job.description == "Authenticate Codex through device login"
+    assert job.input == CodexAuthInputV1()
+    assert job.initiator.external_id == str(user.id)
+    assert job.initiator.display_name == user.email.value
 
 
 async def test_launch_codex_run_queues_run_job(user) -> None:
-    use_case = FakeLaunchJobUseCase()
+    launcher = FakeJobLauncher()
 
     result = await launch_codex_run(
         current_user=user,
-        use_case=use_case,
+        launcher=launcher,
         body=CodexRunCreate(prompt="Inspect this repo", workdir="/tmp/work"),
     )
 
-    assert result.job_id == use_case.job_id
-    assert use_case.calls == [
-        {
-            "job_type": CODEX_RUN_JOB_TYPE,
-            "job_name": "Codex run",
-            "root_initiator": Actor(
-                type=ActorType.USER,
-                id=str(user.id),
-                display_name=user.email.value,
-            ),
-            "job_description": "Run Codex against a workspace",
-            "job_input": {"prompt": "Inspect this repo", "workdir": "/tmp/work"},
-            "parent_job_id": None,
-        }
-    ]
+    assert result.job_id == launcher.job_id
+    assert len(launcher.jobs) == 1
+    job = launcher.jobs[0]
+    assert job.type == "codex.run"
+    assert job.name == "Codex run"
+    assert job.description == "Run Codex against a workspace"
+    assert job.input == CodexRunInputV1(prompt="Inspect this repo", workdir="/tmp/work")
+    assert job.initiator.external_id == str(user.id)
 
 
 async def test_get_codex_auth_code_returns_empty_response_until_ready(user) -> None:
@@ -215,10 +184,10 @@ async def test_get_codex_auth_code_maps_access_denied(user) -> None:
 
 
 async def test_codex_auth_api_route_queues_auth_job(user) -> None:
-    use_case = FakeLaunchJobUseCase()
+    launcher = FakeJobLauncher()
 
     app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_launch_job_use_case] = lambda: use_case
+    app.dependency_overrides[get_job_launcher] = lambda: launcher
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -227,15 +196,15 @@ async def test_codex_auth_api_route_queues_auth_job(user) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"job_id": str(use_case.job_id)}
-    assert use_case.calls[0]["job_type"] == CODEX_AUTH_JOB_TYPE
+    assert response.json() == {"job_id": str(launcher.job_id)}
+    assert launcher.jobs[0].type == "codex.auth"
 
 
 async def test_codex_run_api_route_queues_run_job(user) -> None:
-    use_case = FakeLaunchJobUseCase()
+    launcher = FakeJobLauncher()
 
     app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_launch_job_use_case] = lambda: use_case
+    app.dependency_overrides[get_job_launcher] = lambda: launcher
     try:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -247,12 +216,12 @@ async def test_codex_run_api_route_queues_run_job(user) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"job_id": str(use_case.job_id)}
-    assert use_case.calls[0]["job_type"] == CODEX_RUN_JOB_TYPE
-    assert use_case.calls[0]["job_input"] == {
-        "prompt": "Inspect this repo",
-        "workdir": "/tmp/work",
-    }
+    assert response.json() == {"job_id": str(launcher.job_id)}
+    assert launcher.jobs[0].type == "codex.run"
+    assert launcher.jobs[0].input == CodexRunInputV1(
+        prompt="Inspect this repo",
+        workdir="/tmp/work",
+    )
 
 
 async def test_codex_auth_code_api_route_returns_code(user) -> None:

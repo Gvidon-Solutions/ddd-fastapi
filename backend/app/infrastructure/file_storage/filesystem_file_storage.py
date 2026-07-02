@@ -1,4 +1,4 @@
-"""Filesystem job artifact storage."""
+"""Filesystem file storage."""
 
 from __future__ import annotations
 
@@ -6,47 +6,47 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.config import settings
-from app.domain.job import ArtifactLocation, ArtifactLocationType
-from app.usecase.job.ports import ArtifactStorage
+from app.domain.job import FileLocation, FileLocationType
+from app.usecase.job.ports import FileStorage
 
 
-class FilesystemJobArtifactStorage(ArtifactStorage):
-    """Store artifact payloads on the local filesystem."""
+class FilesystemFileStorage(FileStorage):
+    """Store file payloads on the local filesystem."""
 
-    def __init__(self, root: Path | str = settings.JOB_ARTIFACT_STORAGE_DIRECTORY):
-        """Store the root directory for artifact payloads."""
+    def __init__(self, root: Path | str = settings.JOB_FILE_STORAGE_DIRECTORY):
+        """Store the root directory for file payloads."""
         self.root = Path(root)
 
     async def write(
         self,
         content: bytes | Path,
         metadata: dict | None = None,
-    ) -> ArtifactLocation:
+    ) -> FileLocation:
         """Write bytes or file content to the filesystem and return their location."""
         self.root.mkdir(parents=True, exist_ok=True)
         if isinstance(content, Path) and self._is_stored_path(content):
-            return ArtifactLocation(
-                type=ArtifactLocationType.FILESYSTEM,
+            return FileLocation(
+                type=FileLocationType.FILESYSTEM,
                 uri=str(content),
             )
         content_bytes, source_path = self._content_bytes(content)
         filename = self._build_filename(metadata, source_path)
         path = self.root / filename
         path.write_bytes(content_bytes)
-        return ArtifactLocation(
-            type=ArtifactLocationType.FILESYSTEM,
+        return FileLocation(
+            type=FileLocationType.FILESYSTEM,
             uri=str(path),
         )
 
-    async def read(self, location: ArtifactLocation) -> bytes:
-        """Read bytes from a filesystem artifact location."""
+    async def read(self, location: FileLocation) -> bytes:
+        """Read bytes from a filesystem file location."""
         path = self._path(location)
         if not path.is_file():
             raise FileNotFoundError(location.uri)
         return path.read_bytes()
 
-    async def delete(self, location: ArtifactLocation) -> None:
-        """Delete bytes from a filesystem artifact location."""
+    async def delete(self, location: FileLocation) -> None:
+        """Delete bytes from a filesystem file location."""
         path = self._path(location)
         if not path.is_file():
             raise FileNotFoundError(location.uri)
@@ -58,7 +58,7 @@ class FilesystemJobArtifactStorage(ArtifactStorage):
             return content, None
         if isinstance(content, Path):
             return content.read_bytes(), content
-        raise TypeError(f"Unsupported artifact content type: {type(content).__name__}")
+        raise TypeError(f"Unsupported file content type: {type(content).__name__}")
 
     def _build_filename(
         self,
@@ -81,15 +81,13 @@ class FilesystemJobArtifactStorage(ArtifactStorage):
             return False
         return path.resolve().is_relative_to(self.root.resolve())
 
-    def _path(self, location: ArtifactLocation) -> Path:
-        """Return a filesystem path for an artifact location."""
-        if location.type != ArtifactLocationType.FILESYSTEM:
-            raise ValueError(f"Unsupported artifact location type: {location.type}")
-        if location.uri is None:
-            raise ValueError("Filesystem artifact location requires uri")
+    def _path(self, location: FileLocation) -> Path:
+        """Return a filesystem path for a file location."""
+        if location.type != FileLocationType.FILESYSTEM:
+            raise ValueError(f"Unsupported file location type: {location.type}")
         return Path(location.uri)
 
 
-def new_filesystem_job_artifact_storage() -> ArtifactStorage:
-    """Create filesystem-backed job artifact storage."""
-    return FilesystemJobArtifactStorage()
+def new_filesystem_file_storage() -> FileStorage:
+    """Create filesystem-backed file storage."""
+    return FilesystemFileStorage()

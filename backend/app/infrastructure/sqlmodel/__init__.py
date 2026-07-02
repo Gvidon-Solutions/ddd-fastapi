@@ -4,8 +4,10 @@ from __future__ import annotations
 
 __all__ = (
     "ItemDTO",
-    "JobArtifactDTO",
+    "FileDTO",
+    "InitiatorDTO",
     "JobDTO",
+    "JobFileDTO",
     "EventDTO",
     "UserDTO",
 )

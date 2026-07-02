@@ -7,15 +7,12 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from app.domain.job.base.entities import JobEvent, JobEventPayload
-from app.domain.job.base.value_objects import JobEventType
 
 
 @dataclass(kw_only=True)
 class Event1CodexRunStartedPayload(JobEventPayload):
     """Represent Codex run started payload."""
 
-    job_event_type: JobEventType = field(default=JobEventType.STARTED, init=False)
-    message: str | None = field(default="Running Codex", init=False)
     stage: str
     workdir: str
 
@@ -43,5 +40,5 @@ class Event1CodexRunStarted(JobEvent):
         return "codex_run"
 
     def __post_init__(self) -> None:
-        """Set the event source to the issuing Codex run job."""
-        self.source = f"{self.source_prefix()}/{self.payload.job_id_issuer}"
+        """Set the event source."""
+        self.source = self.source_prefix()

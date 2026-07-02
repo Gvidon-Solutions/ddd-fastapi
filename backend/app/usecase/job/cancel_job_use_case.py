@@ -64,10 +64,10 @@ class CancelJobUseCaseImpl(CancelJobUseCase):
         except NotImplementedError:
             pass
 
-        job.job_status = JobStatus.CANCELLED
+        job.status = JobStatus.CANCELLED
         job.updated_at = now
         job.finished_at = now
-        job.job_error = JobError(
+        job.error = JobError(
             code="CancelledError",
             message="Job cancelled",
         )

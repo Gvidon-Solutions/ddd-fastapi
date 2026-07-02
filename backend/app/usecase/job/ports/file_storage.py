@@ -1,28 +1,28 @@
-"""Define the artifact storage port."""
+"""Define the file storage port."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from app.domain.job import ArtifactLocation
+from app.domain.job import FileLocation
 
 
-class ArtifactStorage(ABC):
-    """Store and read artifact payload bytes."""
+class FileStorage(ABC):
+    """Store and read file payload bytes."""
 
     @abstractmethod
     async def write(
         self,
         content: bytes | Path,
         metadata: dict | None = None,
-    ) -> ArtifactLocation:
+    ) -> FileLocation:
         """Write bytes or file content and return their storage location."""
 
     @abstractmethod
-    async def read(self, location: ArtifactLocation) -> bytes:
+    async def read(self, location: FileLocation) -> bytes:
         """Read bytes from a storage location."""
 
     @abstractmethod
-    async def delete(self, location: ArtifactLocation) -> None:
-        """Delete artifact payload from a storage location."""
+    async def delete(self, location: FileLocation) -> None:
+        """Delete payload from a storage location."""

@@ -7,15 +7,12 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from app.domain.job.base.entities import JobEvent, JobEventPayload
-from app.domain.job.base.value_objects import JobEventType
 
 
 @dataclass(kw_only=True)
 class Event5CodexAuthCancelledPayload(JobEventPayload):
     """Represent Codex auth cancelled payload."""
 
-    job_event_type: JobEventType = field(default=JobEventType.CANCELLED, init=False)
-    message: str | None = field(default="Codex auth cancelled", init=False)
     reason: str = "Job cancelled"
 
     def __getitem__(self, key: str):
@@ -42,5 +39,5 @@ class Event5CodexAuthCancelled(JobEvent):
         return "codex_auth_job_use_case"
 
     def __post_init__(self) -> None:
-        """Set the event source to the issuing Codex auth job."""
-        self.source = f"{self.source_prefix()}/{self.payload.job_id_issuer}"
+        """Set the event source."""
+        self.source = self.source_prefix()

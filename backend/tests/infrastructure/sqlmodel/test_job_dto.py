@@ -4,138 +4,120 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.domain.job import (
-    Actor,
     ActorType,
-    ArtifactKind,
-    ArtifactLocation,
-    ArtifactLocationType,
-    ArtifactRole,
+    File,
+    FileKind,
+    FileLocation,
+    FileLocationType,
+    FileStatus,
+    Initiator,
     Job,
-    JobArtifact,
     JobError,
     JobEvent,
     JobEventPayload,
-    JobEventType,
-    JobStage,
+    JobFile,
+    JobFileRole,
     JobStatus,
 )
 from app.domain.job.codex_auth_job_use_case import (
+    CodexAuthInputV1,
     CodexAuthJobResult,
     Event3CodexAuthSucceeded,
     Event3CodexAuthSucceededPayload,
 )
 from app.infrastructure.sqlmodel.event import EventDTO
-from app.infrastructure.sqlmodel.job import JobArtifactDTO, JobDTO
+from app.infrastructure.sqlmodel.job import FileDTO, JobDTO, JobFileDTO
 
 
 def test_job_dto_round_trips_entity_fields() -> None:
-    # Arrange
-    stage_updated_at = datetime(2026, 6, 23, 0, 30, tzinfo=UTC)
+    initiator = Initiator(
+        type=ActorType.USER,
+        external_id="anton",
+        display_name="Anton",
+    )
     job = Job(
-        job_id=uuid4(),
-        job_type="codex_run",
-        job_name="Run Codex",
-        job_description="Run Codex against repository",
-        job_input={"prompt": "Review repository"},
-        job_status=JobStatus.RUNNING,
-        job_stage=JobStage(
-            key="running_codex",
-            current=1,
-            total=2,
-            message="Running",
-            updated_at=stage_updated_at,
-            data={"pid": 123},
-        ),
-        result_summary={"changed_files": 2},
-        root_initiator=Actor(
-            type=ActorType.USER,
-            id="anton",
-            display_name="Anton",
-        ),
+        id=uuid4(),
+        type="codex.auth",
+        version="v1",
+        name="Codex auth",
+        description="Authenticate Codex",
+        input=CodexAuthInputV1(),
+        result=None,
+        status=JobStatus.RUNNING,
+        initiator=initiator,
         parent_job_id=None,
         requested_at=datetime(2026, 6, 23, tzinfo=UTC),
         updated_at=datetime(2026, 6, 23, 0, 30, tzinfo=UTC),
         started_at=datetime(2026, 6, 23, 1, tzinfo=UTC),
         finished_at=None,
-        job_error=JobError(
+        error=JobError(
             code="RuntimeError",
             message="failed",
             details={"step": "codex"},
         ),
     )
 
-    # Act
-    entity = JobDTO.from_entity(job).to_entity()
+    dto = JobDTO.from_entity(job, initiator_id=uuid4())
+    entity = dto.to_entity(initiator)
 
-    # Assert
     assert entity == job
 
 
-def test_job_artifact_dto_round_trips_entity_fields() -> None:
-    # Arrange
-    artifact = JobArtifact(
-        artifact_id=uuid4(),
-        job_id=uuid4(),
+def test_file_and_job_file_dtos_round_trip_entity_fields() -> None:
+    file = File(
+        file_id=uuid4(),
         name="report.txt",
-        description=None,
-        role=ArtifactRole.OUTPUT,
-        kind=ArtifactKind.FILE,
-        location=ArtifactLocation(
-            type=ArtifactLocationType.FILESYSTEM,
+        kind=FileKind.FILE,
+        location=FileLocation(
+            type=FileLocationType.FILESYSTEM,
             uri="/tmp/report.txt",
         ),
         metadata={"filename": "report.txt"},
+        status=FileStatus.ACTIVE,
+        delete_requested_at=None,
+        delete_attempts=0,
+        last_delete_error=None,
+        created_at=datetime(2026, 6, 23, tzinfo=UTC),
+    )
+    job_file = JobFile(
+        job_id=uuid4(),
+        file=file,
+        role=JobFileRole.OUTPUT,
+        description=None,
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
     )
 
-    # Act
-    entity = JobArtifactDTO.from_entity(artifact).to_entity()
+    file_entity = FileDTO.from_entity(file).to_entity()
+    job_file_entity = JobFileDTO.from_entity(job_file).to_entity(FileDTO.from_entity(file))
 
-    # Assert
-    assert entity == artifact
+    assert file_entity == file
+    assert job_file_entity == job_file
 
 
 def test_event_dto_round_trips_job_event_fields() -> None:
-    # Arrange
     event = JobEvent(
         event_id=uuid4(),
-        type="JobArtifactCreatedV1",
+        type="JobFileCreatedV1",
         source="job",
         version="v1",
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
-        payload=JobEventPayload(
-            job_id_issuer=uuid4(),
-            job_event_type=JobEventType.ARTIFACT_CREATED,
-            message="Created artifact",
-        ),
+        payload=JobEventPayload(),
     )
 
-    # Act
     entity = EventDTO.from_job_event(event).to_job_event()
 
-    # Assert
     assert entity == event
 
 
 def test_event_dto_casts_to_typed_event_dataclass() -> None:
-    # Arrange
-    result = CodexAuthJobResult(
-        authenticated=True,
-        verification_url="https://auth.openai.com/device",
-        device_code="ABCD-EFGH",
-    )
+    result = CodexAuthJobResult(authenticated=True)
     event = Event3CodexAuthSucceeded(
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
-        payload=Event3CodexAuthSucceededPayload(
-            job_id_issuer=uuid4(),
-            summary=result,
-        ),
+        payload=Event3CodexAuthSucceededPayload(summary=result),
     )
 
-    # Act
     entity = EventDTO.from_job_event(event).to_entity()
 
-    # Assert
     assert isinstance(entity, Event3CodexAuthSucceeded)
     assert isinstance(entity.payload, Event3CodexAuthSucceededPayload)
     assert entity.payload.summary == result

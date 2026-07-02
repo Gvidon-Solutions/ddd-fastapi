@@ -10,8 +10,8 @@ from typing import Literal
 
 
 @dataclass(frozen=True)
-class CodexExecLogArtifact:
-    """Represent a diagnostic artifact produced by Codex exec."""
+class CodexExecLogFile:
+    """Represent a diagnostic file produced by Codex exec."""
 
     filename: str
     content: bytes
@@ -19,7 +19,7 @@ class CodexExecLogArtifact:
 
     @property
     def metadata(self) -> dict:
-        """Return artifact metadata."""
+        """Return file metadata."""
         return {"filename": self.filename, "source": "codex"}
 
 
@@ -51,30 +51,30 @@ class CodexExecResult:
         """Return the captured stderr line count."""
         return len(self.stderr_lines)
 
-    def diagnostic_artifacts(self) -> tuple[CodexExecLogArtifact, ...]:
-        """Return diagnostic artifacts worth persisting."""
-        artifacts: list[CodexExecLogArtifact] = []
+    def diagnostic_files(self) -> tuple[CodexExecLogFile, ...]:
+        """Return diagnostic files worth persisting."""
+        files: list[CodexExecLogFile] = []
         if self.stdout_lines:
-            artifacts.append(
-                CodexExecLogArtifact(
+            files.append(
+                CodexExecLogFile(
                     filename="codex_stdout.jsonl",
                     content=_lines_to_bytes(self.stdout_lines),
                     line_count=self.stdout_line_count,
                 )
             )
         if self.stderr_lines:
-            artifacts.append(
-                CodexExecLogArtifact(
+            files.append(
+                CodexExecLogFile(
                     filename="codex_stderr.log",
                     content=_lines_to_bytes(self.stderr_lines),
                     line_count=self.stderr_line_count,
                 )
             )
-        return tuple(artifacts)
+        return tuple(files)
 
-    def diagnostic_artifact_count(self) -> int:
-        """Return the number of diagnostic artifacts worth persisting."""
-        return len(self.diagnostic_artifacts())
+    def diagnostic_file_count(self) -> int:
+        """Return the number of diagnostic files worth persisting."""
+        return len(self.diagnostic_files())
 
     def raise_for_failure(self) -> None:
         """Raise when Codex exec did not finish successfully."""
@@ -92,14 +92,14 @@ class CodexExecResult:
     def summary(
         self,
         *,
-        output_artifact_id: str | None,
-        generated_artifacts: int,
+        output_file_id: str | None,
+        generated_files: int,
     ) -> dict:
         """Return persisted Codex execution summary."""
         return {
-            "output_artifact_id": output_artifact_id,
-            "log_artifacts": self.diagnostic_artifact_count(),
-            "generated_artifacts": generated_artifacts,
+            "output_file_id": output_file_id,
+            "log_files": self.diagnostic_file_count(),
+            "generated_files": generated_files,
         }
 
 

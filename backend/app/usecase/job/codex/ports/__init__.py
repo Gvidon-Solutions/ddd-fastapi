@@ -10,7 +10,7 @@ from .codex_auth_session import (
 from .codex_authenticator import CodexAuthenticator
 from .codex_executor import (
     CodexExecFailedError,
-    CodexExecLogArtifact,
+    CodexExecLogFile,
     CodexExecResult,
     CodexExecutor,
 )
@@ -21,7 +21,7 @@ __all__ = (
     "CodexAuthSessionStatus",
     "CodexAuthSessionStore",
     "CodexExecFailedError",
-    "CodexExecLogArtifact",
+    "CodexExecLogFile",
     "CodexExecResult",
     "CodexExecutor",
 )

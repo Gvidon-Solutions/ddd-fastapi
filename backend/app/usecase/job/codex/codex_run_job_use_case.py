@@ -10,13 +10,15 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from app.domain.job import (
-    ArtifactKind,
-    ArtifactRole,
+    File,
+    FileKind,
+    FileStatus,
     Job,
-    JobArtifact,
-    JobArtifactRepository,
     JobError,
     JobEventRepository,
+    JobFile,
+    JobFileRepository,
+    JobFileRole,
     JobRepository,
     JobStatus,
 )
@@ -25,25 +27,17 @@ from app.domain.job.codex_run_job_use_case import (
     CodexRunResultV1,
     Event1CodexRunStarted,
     Event1CodexRunStartedPayload,
-    Event2CodexRunArtifactCreated,
-    Event2CodexRunArtifactCreatedPayload,
+    Event2CodexRunFileCreated,
+    Event2CodexRunFileCreatedPayload,
     Event3CodexRunSucceeded,
     Event3CodexRunSucceededPayload,
     Event4CodexRunFailed,
     Event4CodexRunFailedPayload,
     Event5CodexRunCancelled,
     Event5CodexRunCancelledPayload,
-    Stage1RunningCodex,
-    Stage1RunningCodexData,
-    Stage2CodexRunCompleted,
-    Stage2CodexRunCompletedData,
-    Stage3CodexRunFailed,
-    Stage3CodexRunFailedData,
-    Stage4CodexRunCancelled,
-    Stage4CodexRunCancelledData,
 )
 from app.usecase.job.codex.ports import CodexExecResult, CodexExecutor
-from app.usecase.job.ports import ArtifactStorage
+from app.usecase.job.ports import FileStorage
 
 
 class CodexRunJobUseCase(ABC):
@@ -60,15 +54,15 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
     def __init__(
         self,
         jobs: JobRepository,
-        artifacts: JobArtifactRepository,
-        storage: ArtifactStorage,
+        job_files: JobFileRepository,
+        storage: FileStorage,
         job_events: JobEventRepository,
         codex_executor: CodexExecutor,
         default_working_directory: Path,
     ):
         """Store use case dependencies."""
         self.jobs = jobs
-        self.artifacts = artifacts
+        self.job_files = job_files
         self.storage = storage
         self.job_events = job_events
         self.codex_executor = codex_executor
@@ -81,23 +75,15 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
         job_workspace = self._job_workspace(job)
 
         now = _now()
-        job.job_status = JobStatus.RUNNING
-        job.job_stage = Stage1RunningCodex(
-            updated_at=now,
-            data=Stage1RunningCodexData(workdir=str(job_workspace)),
-        )
-        job.started_at = now
-        job.updated_at = now
-        await self.jobs.save(job)
         await self.job_events.append(
+            job.id,
             Event1CodexRunStarted(
                 created_at=now,
                 payload=Event1CodexRunStartedPayload(
-                    job_id_issuer=job.job_id,
                     stage="codex_run",
                     workdir=str(job_workspace),
                 ),
-            )
+            ),
         )
 
         try:
@@ -105,191 +91,183 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
                 prompt=prompt,
                 workdir=job_workspace,
             )
-            generated_artifacts = await self._collect_generated_artifacts(
+            generated_files = await self._collect_generated_files(
                 job=job,
                 job_workspace=job_workspace,
             )
-            await self._store_diagnostic_artifacts(job, exec_result)
+            await self._store_diagnostic_files(job, exec_result)
             exec_result.raise_for_failure()
 
-            output_artifact = await self._store_codex_output(job, exec_result)
+            output_job_file = await self._store_codex_output(job, exec_result)
 
-            output_artifact_id = (
-                str(output_artifact.artifact_id) if output_artifact else None
+            output_file_id = (
+                str(output_job_file.file.file_id) if output_job_file else None
             )
-            result_summary = exec_result.summary(
-                output_artifact_id=output_artifact_id,
-                generated_artifacts=len(generated_artifacts),
+            result_payload = exec_result.summary(
+                output_file_id=output_file_id,
+                generated_files=len(generated_files),
             )
             now = _now()
-            job.job_status = JobStatus.SUCCEEDED
-            job.job_stage = Stage2CodexRunCompleted(
-                updated_at=now,
-                data=Stage2CodexRunCompletedData(
-                    output_artifact_id=output_artifact_id,
-                    log_artifacts=exec_result.diagnostic_artifact_count(),
-                    generated_artifacts=len(generated_artifacts),
-                ),
-            )
+            job.status = JobStatus.SUCCEEDED
             job.result = CodexRunResultV1(
-                log_artifacts=exec_result.diagnostic_artifact_count(),
-                generated_artifacts=len(generated_artifacts),
+                log_files=exec_result.diagnostic_file_count(),
+                generated_files=len(generated_files),
             )
             job.finished_at = now
             job.updated_at = now
-            job.job_error = None
+            job.error = None
             if await _mark_succeeded(self.jobs, job, job.result, now):
                 await self.job_events.append(
+                    job.id,
                     Event3CodexRunSucceeded(
                         created_at=now,
                         payload=Event3CodexRunSucceededPayload(
-                            job_id_issuer=job.job_id,
-                            output_artifact_id=output_artifact_id,
-                            log_artifacts=exec_result.diagnostic_artifact_count(),
-                            generated_artifacts=len(generated_artifacts),
+                            output_file_id=output_file_id,
+                            log_files=exec_result.diagnostic_file_count(),
+                            generated_files=len(generated_files),
                         ),
-                    )
+                    ),
                 )
-            return result_summary
+            return result_payload
         except asyncio.CancelledError:
             await self.codex_executor.cancel()
             now = _now()
             reason = "Job cancelled"
-            job.job_status = JobStatus.CANCELLED
-            job.job_error = JobError(
+            job.error = JobError(
                 code="CancelledError",
                 message=reason,
             )
-            job.job_stage = Stage4CodexRunCancelled(
-                updated_at=now,
-                data=Stage4CodexRunCancelledData(reason=reason),
-            )
             job.finished_at = now
             job.updated_at = now
-            if await _mark_cancelled(self.jobs, job, job.job_error, now):
+            job.status = JobStatus.CANCELLED
+            if await _mark_cancelled(self.jobs, job, job.error, now):
                 await self.job_events.append(
+                    job.id,
                     Event5CodexRunCancelled(
                         created_at=now,
                         payload=Event5CodexRunCancelledPayload(
-                            job_id_issuer=job.job_id,
                             reason=reason,
                         ),
-                    )
+                    ),
                 )
             raise
         except Exception as exc:
             now = _now()
-            job.job_status = JobStatus.FAILED
-            job.job_error = JobError(
+            job.error = JobError(
                 code=type(exc).__name__,
                 message=str(exc),
             )
-            job.job_stage = Stage3CodexRunFailed(
-                updated_at=now,
-                data=Stage3CodexRunFailedData(error=str(exc)),
-            )
             job.finished_at = now
             job.updated_at = now
-            if await _mark_failed(self.jobs, job, job.job_error, now):
+            job.status = JobStatus.FAILED
+            if await _mark_failed(self.jobs, job, job.error, now):
                 await self.job_events.append(
+                    job.id,
                     Event4CodexRunFailed(
                         created_at=now,
                         payload=Event4CodexRunFailedPayload(
-                            job_id_issuer=job.job_id,
                             error=str(exc),
                         ),
-                    )
+                    ),
                 )
             raise
 
-    async def _store_diagnostic_artifacts(
+    async def _store_diagnostic_files(
         self,
         job: Job,
         exec_result: CodexExecResult,
     ) -> None:
-        """Persist diagnostic artifacts captured while Codex ran."""
-        for artifact in exec_result.diagnostic_artifacts():
-            await self._store_artifact(
+        """Persist diagnostic files captured while Codex ran."""
+        for file in exec_result.diagnostic_files():
+            await self._store_file(
                 job=job,
-                content=artifact.content,
-                name=artifact.filename,
-                role=ArtifactRole.LOG,
-                kind=ArtifactKind.TEXT,
-                metadata=artifact.metadata,
+                content=file.content,
+                name=file.filename,
+                role=JobFileRole.LOG,
+                kind=FileKind.TEXT,
+                metadata=file.metadata,
             )
 
     async def _store_codex_output(
         self,
         job: Job,
         exec_result: CodexExecResult,
-    ) -> JobArtifact | None:
-        """Persist the final Codex output artifact when it exists."""
+    ) -> JobFile | None:
+        """Persist the final Codex output file when it exists."""
         if not exec_result.output_text:
             return None
-        return await self._store_artifact(
+        return await self._store_file(
             job=job,
             content=exec_result.output_text.encode(),
             name="codex_result.txt",
-            role=ArtifactRole.OUTPUT,
-            kind=ArtifactKind.TEXT,
+            role=JobFileRole.PRIMARY_OUTPUT,
+            kind=FileKind.TEXT,
             metadata={"filename": "codex_result.txt", "source": "codex"},
         )
 
-    async def _store_artifact(
+    async def _store_file(
         self,
         *,
         job: Job,
         content: bytes | Path,
         name: str,
-        role: ArtifactRole,
-        kind: ArtifactKind,
+        role: JobFileRole,
+        kind: FileKind,
         metadata: dict,
         description: str | None = None,
-    ) -> JobArtifact:
+    ) -> JobFile:
         location = await self.storage.write(
             content=content,
             metadata=metadata,
         )
-        artifact = JobArtifact(
-            artifact_id=uuid4(),
-            job_id=job.job_id,
+        file = File(
+            file_id=uuid4(),
             name=name,
-            description=description,
-            role=role,
             kind=kind,
             location=location,
             metadata=metadata,
+            status=FileStatus.ACTIVE,
+            delete_requested_at=None,
+            delete_attempts=0,
+            last_delete_error=None,
             created_at=_now(),
         )
-        await self.artifacts.create(artifact)
+        job_file = JobFile(
+            job_id=job.id,
+            file=file,
+            role=role,
+            description=description,
+            created_at=_now(),
+        )
+        await self.job_files.create(job_file)
         await self.job_events.append(
-            Event2CodexRunArtifactCreated(
+            job.id,
+            Event2CodexRunFileCreated(
                 created_at=_now(),
-                payload=Event2CodexRunArtifactCreatedPayload(
-                    job_id_issuer=job.job_id,
-                    artifact_id=str(artifact.artifact_id),
+                payload=Event2CodexRunFileCreatedPayload(
+                    file_id=str(file.file_id),
                     filename=name,
                 ),
-            )
+            ),
         )
-        return artifact
+        return job_file
 
-    async def _collect_generated_artifacts(
+    async def _collect_generated_files(
         self,
         *,
         job: Job,
         job_workspace: Path,
-    ) -> list[JobArtifact]:
+    ) -> list[JobFile]:
         """Persist all files generated in this Codex run directory."""
-        generated_artifacts: list[JobArtifact] = []
+        generated_files: list[JobFile] = []
         for path in list(_iter_files(job_workspace)):
             relative_path = path.relative_to(job_workspace)
-            artifact = await self._store_artifact(
+            job_file = await self._store_file(
                 job=job,
                 content=path,
                 name=str(relative_path),
-                role=ArtifactRole.OUTPUT,
-                kind=ArtifactKind.FILE,
+                role=JobFileRole.OUTPUT,
+                kind=FileKind.FILE,
                 metadata={
                     "filename": path.name,
                     "relative_path": str(relative_path),
@@ -297,8 +275,8 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
                 },
                 description="Codex workspace file",
             )
-            generated_artifacts.append(artifact)
-        return generated_artifacts
+            generated_files.append(job_file)
+        return generated_files
 
     def _job_workspace(self, job: Job) -> Path:
         """Return the workspace for a Codex run job."""
@@ -307,13 +285,13 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
         workspace_root = self.default_working_directory
         if workdir:
             workspace_root = Path(workdir)
-        return workspace_root / str(job.job_id)
+        return workspace_root / str(job.id)
 
 
 def new_codex_run_job_use_case(
     jobs: JobRepository,
-    artifacts: JobArtifactRepository,
-    storage: ArtifactStorage,
+    job_files: JobFileRepository,
+    storage: FileStorage,
     job_events: JobEventRepository,
     codex_executor: CodexExecutor,
     default_working_directory: Path,
@@ -321,7 +299,7 @@ def new_codex_run_job_use_case(
     """Instantiate the Codex run job use case."""
     return CodexRunJobUseCaseImpl(
         jobs=jobs,
-        artifacts=artifacts,
+        job_files=job_files,
         storage=storage,
         job_events=job_events,
         codex_executor=codex_executor,
@@ -363,7 +341,7 @@ async def _mark_succeeded(
 ) -> bool:
     try:
         return await jobs.try_mark_succeeded(
-            job.job_id,
+            job.id,
             result=result,
             finished_at=finished_at,
         )
@@ -380,7 +358,7 @@ async def _mark_failed(
 ) -> bool:
     try:
         return await jobs.try_mark_failed(
-            job.job_id,
+            job.id,
             error=error,
             finished_at=finished_at,
         )
@@ -397,7 +375,7 @@ async def _mark_cancelled(
 ) -> bool:
     try:
         return await jobs.try_mark_cancelled(
-            job.job_id,
+            job.id,
             error=error,
             finished_at=finished_at,
         )

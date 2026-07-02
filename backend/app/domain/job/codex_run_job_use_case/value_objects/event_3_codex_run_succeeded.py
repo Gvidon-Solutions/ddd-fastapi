@@ -7,18 +7,15 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from app.domain.job.base.entities import JobEvent, JobEventPayload
-from app.domain.job.base.value_objects import JobEventType
 
 
 @dataclass(kw_only=True)
 class Event3CodexRunSucceededPayload(JobEventPayload):
     """Represent Codex run succeeded payload."""
 
-    job_event_type: JobEventType = field(default=JobEventType.SUCCEEDED, init=False)
-    message: str | None = field(default="Codex finished", init=False)
-    output_artifact_id: str | None
-    log_artifacts: int
-    generated_artifacts: int
+    output_file_id: str | None
+    log_files: int
+    generated_files: int
 
     def __getitem__(self, key: str):
         """Return a field value by key."""
@@ -44,5 +41,5 @@ class Event3CodexRunSucceeded(JobEvent):
         return "codex_run"
 
     def __post_init__(self) -> None:
-        """Set the event source to the issuing Codex run job."""
-        self.source = f"{self.source_prefix()}/{self.payload.job_id_issuer}"
+        """Set the event source."""
+        self.source = self.source_prefix()

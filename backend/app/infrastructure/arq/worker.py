@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import settings
 from app.infrastructure.arq.deps import (
-    ARQ_ARTIFACT_STORAGE,
     ARQ_CODEX_AUTH_SESSION,
     ARQ_CODEX_AUTHENTICATOR,
     ARQ_DB_ENGINE,
+    ARQ_FILE_STORAGE,
 )
 from app.infrastructure.arq.job_workers import worker_bindings
 from app.infrastructure.arq.settings import arq_redis_settings
@@ -20,7 +20,7 @@ from app.infrastructure.codex import (
     new_codex_authenticator,
     new_redis_codex_auth_session_store,
 )
-from app.infrastructure.job_artifact_storage import new_filesystem_job_artifact_storage
+from app.infrastructure.file_storage import new_filesystem_file_storage
 
 importlib.import_module("app.infrastructure.arq.jobs")
 
@@ -28,7 +28,7 @@ importlib.import_module("app.infrastructure.arq.jobs")
 async def on_startup(ctx: dict[str, Any]) -> None:
     """Initialize ARQ worker dependencies."""
     ctx[ARQ_DB_ENGINE] = create_async_engine(str(settings.SQLALCHEMY_DATABASE_URI))
-    ctx[ARQ_ARTIFACT_STORAGE] = new_filesystem_job_artifact_storage()
+    ctx[ARQ_FILE_STORAGE] = new_filesystem_file_storage()
     ctx[ARQ_CODEX_AUTHENTICATOR] = new_codex_authenticator()
     ctx[ARQ_CODEX_AUTH_SESSION] = new_redis_codex_auth_session_store()
 

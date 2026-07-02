@@ -79,3 +79,7 @@ class JobRepository(ABC):
     ) -> bool:
         """Atomically mark a running or queued job as cancelled."""
         raise NotImplementedError
+
+    async def delete(self, job_id: UUID, *, cascade_children: bool = False) -> None:
+        """Delete a terminal job and clean up links/read-side metadata."""
+        raise NotImplementedError

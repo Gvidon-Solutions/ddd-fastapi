@@ -17,3 +17,15 @@ class UnknownJobContractError(JobContractError):
 
 class JobSerializationError(JobContractError):
     """Raised when persisted job data cannot be decoded."""
+
+
+class JobDeleteError(Exception):
+    """Base class for job deletion errors."""
+
+
+class JobDeleteNotAllowedError(JobDeleteError):
+    """Raised when a non-terminal job is deleted."""
+
+
+class JobHasChildrenError(JobDeleteError):
+    """Raised when a job has children and cascade deletion is disabled."""

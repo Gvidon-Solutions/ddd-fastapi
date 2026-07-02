@@ -10,8 +10,6 @@ from sqlalchemy import JSON, Column, DateTime
 from sqlmodel import Field, SQLModel
 
 from app.domain.job import (
-    ActorType,
-    Initiator,
     Job,
     JobError,
     JobSerializationError,
@@ -36,7 +34,7 @@ class JobDTO(SQLModel, table=True):
     input: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     result: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     status: str = Field(max_length=32, index=True)
-    initiator: dict = Field(sa_column=Column(JSON, nullable=False))
+    initiator_id: uuid.UUID = Field(foreign_key="initiator.initiator_id", index=True)
     parent_job_id: uuid.UUID | None = Field(default=None, foreign_key="job.job_id")
     requested_at: datetime = Field(
         default_factory=get_datetime_utc,
@@ -56,7 +54,7 @@ class JobDTO(SQLModel, table=True):
     )
     error: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
-    def to_entity(self) -> Job:
+    def to_entity(self, initiator) -> Job:
         """Convert this persistence DTO to a typed domain entity."""
         contract = job_registry.get(type=self.type, version=self.version)
         try:
@@ -81,7 +79,7 @@ class JobDTO(SQLModel, table=True):
             input=input_obj,
             result=result_obj,
             status=JobStatus(self.status),
-            initiator=_initiator_to_entity(self.initiator),
+            initiator=initiator,
             parent_job_id=self.parent_job_id,
             requested_at=ensure_datetime_utc(self.requested_at),
             updated_at=ensure_datetime_utc(self.updated_at),
@@ -95,7 +93,7 @@ class JobDTO(SQLModel, table=True):
         )
 
     @staticmethod
-    def from_entity(job: Job) -> JobDTO:
+    def from_entity(job: Job, *, initiator_id: uuid.UUID) -> JobDTO:
         """Build a persistence DTO from a domain entity."""
         return JobDTO(
             job_id=job.id,
@@ -106,7 +104,7 @@ class JobDTO(SQLModel, table=True):
             input=_to_record(job.input) or {},
             result=_to_record(job.result),
             status=job.status.value,
-            initiator=_initiator_to_record(job.initiator),
+            initiator_id=initiator_id,
             parent_job_id=job.parent_job_id,
             requested_at=job.requested_at,
             updated_at=job.updated_at,
@@ -127,24 +125,6 @@ def _to_record(value) -> dict | None:
             raise JobSerializationError("Expected dataclass to serialize to object")
         return serialized
     return value
-
-
-def _initiator_to_entity(initiator: dict) -> Initiator:
-    return Initiator(
-        type=ActorType(initiator["type"]),
-        external_id=initiator.get("external_id", initiator.get("id")),
-        display_name=initiator.get("display_name"),
-        metadata=initiator.get("metadata") or None,
-    )
-
-
-def _initiator_to_record(initiator: Initiator) -> dict:
-    return {
-        "type": initiator.type.value,
-        "external_id": initiator.external_id,
-        "display_name": initiator.display_name,
-        "metadata": initiator.metadata or {},
-    }
 
 
 def _error_to_entity(error: dict | None) -> JobError | None:
