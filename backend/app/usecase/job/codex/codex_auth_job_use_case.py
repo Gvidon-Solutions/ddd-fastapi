@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from app.domain.job import (
@@ -36,7 +36,7 @@ from app.domain.job.codex_auth_job_use_case import (
     Stage5CodexAuthCancelled,
     Stage5CodexAuthCancelledData,
 )
-from app.usecase.job.codex.ports import CodexAuthenticator
+from app.usecase.job.codex.ports import CodexAuthenticator, CodexAuthSessionStore
 
 
 class CodexAuthUseCase(ABC):
@@ -55,11 +55,13 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
         jobs: JobRepository,
         job_events: JobEventRepository,
         codex_authenticator: CodexAuthenticator,
+        auth_sessions: CodexAuthSessionStore | None = None,
     ):
         """Store use case dependencies."""
         self.jobs = jobs
         self.job_events = job_events
         self.codex_authenticator = codex_authenticator
+        self.auth_sessions = auth_sessions
 
     async def execute(self, job_id: UUID) -> CodexAuthJobResult:
         """Execute Codex device auth for one persisted job."""
@@ -83,6 +85,13 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
         try:
             device_auth = await self.codex_authenticator.start_device_auth()
             now = _now()
+            if self.auth_sessions is not None:
+                await self.auth_sessions.save_pending(
+                    job_id=job.job_id,
+                    verification_url=device_auth.verification_url,
+                    user_code=device_auth.device_code,
+                    expires_at=now + timedelta(minutes=10),
+                )
             waiting_stage = Stage2WaitingForUserLogin(
                 updated_at=now,
                 data=Stage2WaitingForUserLoginData(
@@ -110,8 +119,6 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
 
             result_summary = CodexAuthJobResult(
                 authenticated=auth_result.authenticated,
-                verification_url=device_auth.verification_url,
-                device_code=device_auth.device_code,
                 error_message=auth_result.error_message,
             )
             now = _now()
@@ -125,20 +132,22 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
                     device_code=device_auth.device_code,
                 ),
             )
-            job.result_summary = result_summary.to_dict()
+            job.result = result_summary
             job.finished_at = now
             job.updated_at = now
             job.job_error = None
-            await self.jobs.save(job)
-            await self.job_events.append(
-                Event3CodexAuthSucceeded(
-                    created_at=now,
-                    payload=Event3CodexAuthSucceededPayload(
-                        job_id_issuer=job.job_id,
-                        summary=result_summary,
-                    ),
+            if await _mark_succeeded(self.jobs, job, result_summary, now):
+                if self.auth_sessions is not None:
+                    await self.auth_sessions.mark_authenticated(job.job_id)
+                await self.job_events.append(
+                    Event3CodexAuthSucceeded(
+                        created_at=now,
+                        payload=Event3CodexAuthSucceededPayload(
+                            job_id_issuer=job.job_id,
+                            summary=result_summary,
+                        ),
+                    )
                 )
-            )
             return result_summary
         except asyncio.CancelledError:
             await self.codex_authenticator.cancel()
@@ -155,16 +164,18 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
             )
             job.finished_at = now
             job.updated_at = now
-            await self.jobs.save(job)
-            await self.job_events.append(
-                Event5CodexAuthCancelled(
-                    created_at=now,
-                    payload=Event5CodexAuthCancelledPayload(
-                        job_id_issuer=job.job_id,
-                        reason=reason,
-                    ),
+            if await _mark_cancelled(self.jobs, job, job.job_error, now):
+                if self.auth_sessions is not None:
+                    await self.auth_sessions.mark_cancelled(job.job_id, reason)
+                await self.job_events.append(
+                    Event5CodexAuthCancelled(
+                        created_at=now,
+                        payload=Event5CodexAuthCancelledPayload(
+                            job_id_issuer=job.job_id,
+                            reason=reason,
+                        ),
+                    )
                 )
-            )
             raise
         except Exception as exc:
             now = _now()
@@ -179,16 +190,18 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
             )
             job.finished_at = now
             job.updated_at = now
-            await self.jobs.save(job)
-            await self.job_events.append(
-                Event4CodexAuthFailed(
-                    created_at=now,
-                    payload=Event4CodexAuthFailedPayload(
-                        job_id_issuer=job.job_id,
-                        error=str(exc),
-                    ),
+            if await _mark_failed(self.jobs, job, job.job_error, now):
+                if self.auth_sessions is not None:
+                    await self.auth_sessions.mark_failed(job.job_id, str(exc))
+                await self.job_events.append(
+                    Event4CodexAuthFailed(
+                        created_at=now,
+                        payload=Event4CodexAuthFailedPayload(
+                            job_id_issuer=job.job_id,
+                            error=str(exc),
+                        ),
+                    )
                 )
-            )
             raise
 
 
@@ -196,12 +209,14 @@ def new_codex_auth_use_case(
     jobs: JobRepository,
     job_events: JobEventRepository,
     codex_authenticator: CodexAuthenticator,
+    auth_sessions: CodexAuthSessionStore | None = None,
 ) -> CodexAuthUseCase:
     """Instantiate the Codex auth use case."""
     return CodexAuthUseCaseImpl(
         jobs=jobs,
         job_events=job_events,
         codex_authenticator=codex_authenticator,
+        auth_sessions=auth_sessions,
     )
 
 
@@ -213,3 +228,54 @@ def _auth_error_message(auth_result: CodexAuthResult) -> str:
 def _now() -> datetime:
     """Return the current UTC time."""
     return datetime.now(UTC)
+
+
+async def _mark_succeeded(
+    jobs: JobRepository,
+    job,
+    result: CodexAuthJobResult,
+    finished_at: datetime,
+) -> bool:
+    try:
+        return await jobs.try_mark_succeeded(
+            job.job_id,
+            result=result,
+            finished_at=finished_at,
+        )
+    except NotImplementedError:
+        await jobs.save(job)
+        return True
+
+
+async def _mark_failed(
+    jobs: JobRepository,
+    job,
+    error: JobError,
+    finished_at: datetime,
+) -> bool:
+    try:
+        return await jobs.try_mark_failed(
+            job.job_id,
+            error=error,
+            finished_at=finished_at,
+        )
+    except NotImplementedError:
+        await jobs.save(job)
+        return True
+
+
+async def _mark_cancelled(
+    jobs: JobRepository,
+    job,
+    error: JobError,
+    finished_at: datetime,
+) -> bool:
+    try:
+        return await jobs.try_mark_cancelled(
+            job.job_id,
+            error=error,
+            finished_at=finished_at,
+        )
+    except NotImplementedError:
+        await jobs.save(job)
+        return True

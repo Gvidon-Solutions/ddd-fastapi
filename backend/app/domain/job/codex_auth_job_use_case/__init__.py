@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from .value_objects import (
+    CodexAuthInputV1,
     CodexAuthJobResult,
+    CodexAuthJobV1,
     CodexAuthResult,
+    CodexAuthResultV1,
     CodexDeviceAuth,
     Event1CodexAuthStarted,
     Event1CodexAuthStartedPayload,
@@ -29,7 +32,10 @@ from .value_objects import (
 )
 
 __all__ = (
+    "CodexAuthInputV1",
+    "CodexAuthJobV1",
     "CodexAuthResult",
+    "CodexAuthResultV1",
     "CodexAuthJobResult",
     "CodexDeviceAuth",
     "Event1CodexAuthStarted",

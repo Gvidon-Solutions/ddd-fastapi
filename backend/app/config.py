@@ -103,6 +103,8 @@ class Settings(BaseSettings):
     CODEX_JOB_EVENTS_STREAM_MAXLEN: int = 10_000
     CODEX_CLI_PATH: str = "codex"
     CODEX_DEVICE_LOGIN_START_TIMEOUT_SECONDS: float = 10.0
+    CODEX_AUTH_SESSION_PENDING_TTL_SECONDS: int = 10 * 60
+    CODEX_AUTH_SESSION_TERMINAL_TTL_SECONDS: int = 5 * 60
 
     @computed_field  # type: ignore[prop-decorator]
     @property

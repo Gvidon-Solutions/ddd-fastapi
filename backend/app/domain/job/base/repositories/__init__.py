@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from .job_artifact_repository import JobArtifactRepository
 from .job_event_repository import JobEventRepository
-from .job_repository import JobRepository
+from .job_repository import JobExecutionRecord, JobRepository
 
-__all__ = ("JobArtifactRepository", "JobEventRepository", "JobRepository")
+__all__ = (
+    "JobArtifactRepository",
+    "JobEventRepository",
+    "JobExecutionRecord",
+    "JobRepository",
+)

@@ -14,6 +14,9 @@ from .get_codex_auth_code_and_url_use_case import (
 )
 from .ports import (
     CodexAuthenticator,
+    CodexAuthSession,
+    CodexAuthSessionStatus,
+    CodexAuthSessionStore,
     CodexExecFailedError,
     CodexExecLogArtifact,
     CodexExecResult,
@@ -22,6 +25,9 @@ from .ports import (
 
 __all__ = (
     "CodexAuthUseCase",
+    "CodexAuthSession",
+    "CodexAuthSessionStatus",
+    "CodexAuthSessionStore",
     "CodexAuthenticator",
     "CodexExecFailedError",
     "CodexExecLogArtifact",

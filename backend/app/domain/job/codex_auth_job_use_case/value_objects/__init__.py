@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from .codex_auth_job_result import CodexAuthJobResult
 from .codex_auth_result import CodexAuthResult
 from .codex_device_auth import CodexDeviceAuth
+from .contracts import (
+    CodexAuthInputV1,
+    CodexAuthJobResult,
+    CodexAuthJobV1,
+    CodexAuthResultV1,
+)
 from .event_1_codex_auth_started import (
     Event1CodexAuthStarted,
     Event1CodexAuthStartedPayload,
@@ -47,7 +52,10 @@ from .stage_5_codex_auth_cancelled import (
 )
 
 __all__ = (
+    "CodexAuthInputV1",
+    "CodexAuthJobV1",
     "CodexAuthResult",
+    "CodexAuthResultV1",
     "CodexAuthJobResult",
     "CodexDeviceAuth",
     "Event1CodexAuthStarted",

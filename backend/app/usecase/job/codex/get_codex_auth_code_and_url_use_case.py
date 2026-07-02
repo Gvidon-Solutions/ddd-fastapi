@@ -7,8 +7,9 @@ from uuid import UUID
 
 from app.domain.job import Job, JobRepository
 from app.domain.job.codex_auth_job_use_case import CodexDeviceAuth
+from app.usecase.job.codex.ports import CodexAuthSessionStatus, CodexAuthSessionStore
 
-CODEX_AUTH_JOB_TYPE = "execute_codex_auth_job_use_case"
+CODEX_AUTH_JOB_TYPE = "codex.auth"
 
 
 class CodexAuthCodeJobNotFoundError(Exception):
@@ -38,9 +39,14 @@ class GetCodexAuthCodeAndUrlUseCase(ABC):
 class GetCodexAuthCodeAndUrlUseCaseImpl(GetCodexAuthCodeAndUrlUseCase):
     """Read Codex auth code data from a persisted auth job."""
 
-    def __init__(self, jobs: JobRepository):
+    def __init__(
+        self,
+        jobs: JobRepository,
+        auth_sessions: CodexAuthSessionStore | None = None,
+    ):
         """Store use case dependencies."""
         self.jobs = jobs
+        self.auth_sessions = auth_sessions
 
     async def execute(
         self,
@@ -53,18 +59,34 @@ class GetCodexAuthCodeAndUrlUseCaseImpl(GetCodexAuthCodeAndUrlUseCase):
         except KeyError:
             raise CodexAuthCodeJobNotFoundError(str(job_id))
 
-        if job.job_type != CODEX_AUTH_JOB_TYPE:
+        if job.type != CODEX_AUTH_JOB_TYPE:
             raise CodexAuthCodeJobTypeError(str(job_id))
         if job.root_initiator.id != current_user_id:
             raise CodexAuthCodeAccessDeniedError(str(job_id))
+        if self.auth_sessions is not None:
+            session = await self.auth_sessions.get(job_id)
+            if (
+                session is not None
+                and session.status == CodexAuthSessionStatus.PENDING
+                and isinstance(session.verification_url, str)
+                and isinstance(session.user_code, str)
+            ):
+                return CodexDeviceAuth(
+                    verification_url=session.verification_url,
+                    device_code=session.user_code,
+                )
         return _auth_code_from_job(job)
 
 
 def new_get_codex_auth_code_and_url_use_case(
     jobs: JobRepository,
+    auth_sessions: CodexAuthSessionStore | None = None,
 ) -> GetCodexAuthCodeAndUrlUseCase:
     """Instantiate the Codex auth code polling use case."""
-    return GetCodexAuthCodeAndUrlUseCaseImpl(jobs=jobs)
+    return GetCodexAuthCodeAndUrlUseCaseImpl(
+        jobs=jobs,
+        auth_sessions=auth_sessions,
+    )
 
 
 def _auth_code_from_job(job: Job) -> CodexDeviceAuth | None:

@@ -9,6 +9,8 @@ from uuid import UUID
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
+from app.domain.job import JobRepository
+from app.domain.job.codex_run_job_use_case import CodexRunJobV1
 from app.infrastructure.arq.deps import (
     ARQ_ARTIFACT_STORAGE,
     get_arq_db_engine,
@@ -16,10 +18,12 @@ from app.infrastructure.arq.deps import (
     new_arq_job_event_repository,
     new_arq_job_repository,
 )
+from app.infrastructure.arq.job_workers import job_worker
 from app.infrastructure.codex import new_codex_executor
 from app.usecase.job.codex import new_codex_run_job_use_case
 
 
+@job_worker(contract=CodexRunJobV1)
 async def codex_run(
     ctx: dict[str, Any],
     job_id: str,
@@ -28,8 +32,11 @@ async def codex_run(
     engine = get_arq_db_engine(ctx)
     async with AsyncSession(engine) as session:
         try:
+            jobs = new_arq_job_repository(session)
+            if not await _claim_execution(jobs, UUID(job_id)):
+                return {}
             use_case = new_codex_run_job_use_case(
-                jobs=new_arq_job_repository(session),
+                jobs=jobs,
                 artifacts=new_arq_job_artifact_repository(session),
                 storage=ctx[ARQ_ARTIFACT_STORAGE],
                 job_events=new_arq_job_event_repository(session),
@@ -40,3 +47,12 @@ async def codex_run(
         except Exception:
             await session.rollback()
             raise
+
+
+async def _claim_execution(jobs: JobRepository, job_id: UUID) -> bool:
+    try:
+        from datetime import UTC, datetime
+
+        return await jobs.try_mark_running(job_id, started_at=datetime.now(UTC))
+    except NotImplementedError:
+        return True

@@ -21,6 +21,8 @@ from app.domain.job import (
     JobStatus,
 )
 from app.domain.job.codex_run_job_use_case import (
+    CodexRunInputV1,
+    CodexRunResultV1,
     Event1CodexRunStarted,
     Event1CodexRunStartedPayload,
     Event2CodexRunArtifactCreated,
@@ -129,22 +131,25 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
                     generated_artifacts=len(generated_artifacts),
                 ),
             )
-            job.result_summary = result_summary
+            job.result = CodexRunResultV1(
+                log_artifacts=exec_result.diagnostic_artifact_count(),
+                generated_artifacts=len(generated_artifacts),
+            )
             job.finished_at = now
             job.updated_at = now
             job.job_error = None
-            await self.jobs.save(job)
-            await self.job_events.append(
-                Event3CodexRunSucceeded(
-                    created_at=now,
-                    payload=Event3CodexRunSucceededPayload(
-                        job_id_issuer=job.job_id,
-                        output_artifact_id=output_artifact_id,
-                        log_artifacts=exec_result.diagnostic_artifact_count(),
-                        generated_artifacts=len(generated_artifacts),
-                    ),
+            if await _mark_succeeded(self.jobs, job, job.result, now):
+                await self.job_events.append(
+                    Event3CodexRunSucceeded(
+                        created_at=now,
+                        payload=Event3CodexRunSucceededPayload(
+                            job_id_issuer=job.job_id,
+                            output_artifact_id=output_artifact_id,
+                            log_artifacts=exec_result.diagnostic_artifact_count(),
+                            generated_artifacts=len(generated_artifacts),
+                        ),
+                    )
                 )
-            )
             return result_summary
         except asyncio.CancelledError:
             await self.codex_executor.cancel()
@@ -161,16 +166,16 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             )
             job.finished_at = now
             job.updated_at = now
-            await self.jobs.save(job)
-            await self.job_events.append(
-                Event5CodexRunCancelled(
-                    created_at=now,
-                    payload=Event5CodexRunCancelledPayload(
-                        job_id_issuer=job.job_id,
-                        reason=reason,
-                    ),
+            if await _mark_cancelled(self.jobs, job, job.job_error, now):
+                await self.job_events.append(
+                    Event5CodexRunCancelled(
+                        created_at=now,
+                        payload=Event5CodexRunCancelledPayload(
+                            job_id_issuer=job.job_id,
+                            reason=reason,
+                        ),
+                    )
                 )
-            )
             raise
         except Exception as exc:
             now = _now()
@@ -185,16 +190,16 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             )
             job.finished_at = now
             job.updated_at = now
-            await self.jobs.save(job)
-            await self.job_events.append(
-                Event4CodexRunFailed(
-                    created_at=now,
-                    payload=Event4CodexRunFailedPayload(
-                        job_id_issuer=job.job_id,
-                        error=str(exc),
-                    ),
+            if await _mark_failed(self.jobs, job, job.job_error, now):
+                await self.job_events.append(
+                    Event4CodexRunFailed(
+                        created_at=now,
+                        payload=Event4CodexRunFailedPayload(
+                            job_id_issuer=job.job_id,
+                            error=str(exc),
+                        ),
+                    )
                 )
-            )
             raise
 
     async def _store_diagnostic_artifacts(
@@ -297,10 +302,10 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
 
     def _job_workspace(self, job: Job) -> Path:
         """Return the workspace for a Codex run job."""
-        job_input = job.job_input or {}
-        workdir = job_input.get("workdir")
+        job_input = _codex_run_input(job)
+        workdir = job_input.workdir
         workspace_root = self.default_working_directory
-        if isinstance(workdir, str) and workdir:
+        if workdir:
             workspace_root = Path(workdir)
         return workspace_root / str(job.job_id)
 
@@ -326,11 +331,18 @@ def new_codex_run_job_use_case(
 
 def _job_prompt(job: Job) -> str:
     """Return the prompt for a Codex run job."""
-    job_input = job.job_input or {}
-    prompt = job_input.get("prompt")
-    if not isinstance(prompt, str) or not prompt.strip():
+    prompt = _codex_run_input(job).prompt
+    if not prompt.strip():
         raise ValueError("codex_run job requires input.prompt")
     return prompt
+
+
+def _codex_run_input(job: Job) -> CodexRunInputV1:
+    if isinstance(job.input, CodexRunInputV1):
+        return job.input
+    if isinstance(job.input, dict):
+        return CodexRunInputV1(**job.input)
+    raise ValueError("codex_run job requires CodexRunInputV1")
 
 
 def _iter_files(root: Path) -> Iterable[Path]:
@@ -341,3 +353,54 @@ def _iter_files(root: Path) -> Iterable[Path]:
 def _now() -> datetime:
     """Return the current UTC time."""
     return datetime.now(UTC)
+
+
+async def _mark_succeeded(
+    jobs: JobRepository,
+    job: Job,
+    result: object,
+    finished_at: datetime,
+) -> bool:
+    try:
+        return await jobs.try_mark_succeeded(
+            job.job_id,
+            result=result,
+            finished_at=finished_at,
+        )
+    except NotImplementedError:
+        await jobs.save(job)
+        return True
+
+
+async def _mark_failed(
+    jobs: JobRepository,
+    job: Job,
+    error: JobError,
+    finished_at: datetime,
+) -> bool:
+    try:
+        return await jobs.try_mark_failed(
+            job.job_id,
+            error=error,
+            finished_at=finished_at,
+        )
+    except NotImplementedError:
+        await jobs.save(job)
+        return True
+
+
+async def _mark_cancelled(
+    jobs: JobRepository,
+    job: Job,
+    error: JobError,
+    finished_at: datetime,
+) -> bool:
+    try:
+        return await jobs.try_mark_cancelled(
+            job.job_id,
+            error=error,
+            finished_at=finished_at,
+        )
+    except NotImplementedError:
+        await jobs.save(job)
+        return True

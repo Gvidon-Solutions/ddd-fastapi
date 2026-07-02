@@ -10,7 +10,8 @@ from app.config import settings
 from app.domain.item.repositories import ItemRepository
 from app.domain.job import JobArtifactRepository, JobEventRepository, JobRepository
 from app.domain.user.repositories import UserRepository
-from app.infrastructure.arq import new_arq_job_queue
+from app.infrastructure.arq import new_arq_job_queue, new_redis_job_cancellation_backend
+from app.infrastructure.codex import new_redis_codex_auth_session_store
 from app.infrastructure.job_artifact_storage import new_filesystem_job_artifact_storage
 from app.infrastructure.security import new_password_hasher
 from app.infrastructure.sqlmodel.event import new_job_event_repository
@@ -35,7 +36,9 @@ from app.usecase.item import (
 from app.usecase.job import (
     ArtifactStorage,
     CancelJobUseCase,
+    CodexAuthSessionStore,
     GetCodexAuthCodeAndUrlUseCase,
+    JobCancellationBackend,
     JobQueue,
     LaunchJobUseCase,
     new_cancel_job_use_case,
@@ -120,9 +123,19 @@ def get_job_queue() -> JobQueue:
     return new_arq_job_queue()
 
 
+def get_job_cancellation_backend() -> JobCancellationBackend:
+    """Provide running-job cancellation backend."""
+    return new_redis_job_cancellation_backend()
+
+
 def get_artifact_storage() -> ArtifactStorage:
     """Provide artifact storage."""
     return new_filesystem_job_artifact_storage()
+
+
+def get_codex_auth_session_store() -> CodexAuthSessionStore:
+    """Provide transient Codex auth session storage."""
+    return new_redis_codex_auth_session_store()
 
 
 def get_password_hasher() -> PasswordHasher:
@@ -139,6 +152,7 @@ def get_authenticate_user_use_case(
 
 
 def get_launch_job_use_case(
+    session: AsyncSession = Depends(get_session),
     jobs: JobRepository = Depends(get_job_repository),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LaunchJobUseCase:
@@ -146,24 +160,31 @@ def get_launch_job_use_case(
     return new_launch_job_use_case(
         jobs=jobs,
         queue=queue,
+        session=session,
     )
 
 
 def get_codex_auth_code_and_url_use_case(
     jobs: JobRepository = Depends(get_job_repository),
+    auth_sessions: CodexAuthSessionStore = Depends(get_codex_auth_session_store),
 ) -> GetCodexAuthCodeAndUrlUseCase:
     """Provide the Codex auth code polling use case."""
-    return new_get_codex_auth_code_and_url_use_case(jobs=jobs)
+    return new_get_codex_auth_code_and_url_use_case(
+        jobs=jobs,
+        auth_sessions=auth_sessions,
+    )
 
 
 def get_cancel_job_use_case(
     jobs: JobRepository = Depends(get_job_repository),
     queue: JobQueue = Depends(get_job_queue),
+    cancellation_backend: JobCancellationBackend = Depends(get_job_cancellation_backend),
 ) -> CancelJobUseCase:
     """Provide the cancel-job use case."""
     return new_cancel_job_use_case(
         jobs=jobs,
         queue=queue,
+        cancellation_backend=cancellation_backend,
     )
 
 

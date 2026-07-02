@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .contracts import CodexRunInputV1, CodexRunJobV1, CodexRunResultV1
 from .event_1_codex_run_started import (
     Event1CodexRunStarted,
     Event1CodexRunStartedPayload,
@@ -37,6 +38,9 @@ from .stage_4_codex_run_cancelled import (
 )
 
 __all__ = (
+    "CodexRunInputV1",
+    "CodexRunJobV1",
+    "CodexRunResultV1",
     "Event1CodexRunStarted",
     "Event1CodexRunStartedPayload",
     "Event2CodexRunArtifactCreated",

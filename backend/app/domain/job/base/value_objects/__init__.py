@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .actor import Actor
+from .actor import Actor, Initiator
 from .actor_type import ActorType
 from .artifact_kind import ArtifactKind
 from .artifact_location import ArtifactLocation
@@ -15,6 +15,7 @@ from .job_status import JobStatus
 
 __all__ = (
     "Actor",
+    "Initiator",
     "ActorType",
     "ArtifactKind",
     "ArtifactLocation",

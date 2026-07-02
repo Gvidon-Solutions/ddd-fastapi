@@ -26,7 +26,7 @@ from app.usecase.job import (
     LaunchJobUseCase,
 )
 
-CODEX_RUN_JOB_TYPE = "codex_run"
+CODEX_RUN_JOB_TYPE = "codex.run"
 
 router = APIRouter(prefix="/codex", tags=["codex"])
 

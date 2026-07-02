@@ -18,30 +18,54 @@ depends_on = None
 
 
 def upgrade() -> None:
-    """Create generic job, artifact, and event tables."""
+    """Create generic job, artifact, event, and dispatch outbox tables."""
     op.create_table(
         "job",
         sa.Column("job_id", sa.Uuid(), nullable=False),
-        sa.Column("job_type", sa.String(length=255), nullable=False),
-        sa.Column("job_name", sa.String(length=255), nullable=False),
-        sa.Column("job_description", sa.String(), nullable=True),
-        sa.Column("job_input", sa.JSON(), nullable=True),
-        sa.Column("job_status", sa.String(length=32), nullable=False),
-        sa.Column("job_stage", sa.JSON(), nullable=True),
-        sa.Column("result_summary", sa.JSON(), nullable=True),
-        sa.Column("root_initiator", sa.JSON(), nullable=False),
+        sa.Column("type", sa.String(length=255), nullable=False),
+        sa.Column("version", sa.String(length=32), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=True),
+        sa.Column("description", sa.String(), nullable=True),
+        sa.Column("input", sa.JSON(), nullable=False),
+        sa.Column("result", sa.JSON(), nullable=True),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("initiator", sa.JSON(), nullable=False),
         sa.Column("parent_job_id", sa.Uuid(), nullable=True),
-        sa.Column("requested_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("requested_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("job_error", sa.JSON(), nullable=True),
+        sa.Column("error", sa.JSON(), nullable=True),
         sa.ForeignKeyConstraint(["parent_job_id"], ["job.job_id"]),
         sa.PrimaryKeyConstraint("job_id"),
     )
-    op.create_index("ix_job_job_name", "job", ["job_name"])
-    op.create_index("ix_job_job_status", "job", ["job_status"])
-    op.create_index("ix_job_job_type", "job", ["job_type"])
+    op.create_index("ix_job_name", "job", ["name"])
+    op.create_index("ix_job_status", "job", ["status"])
+    op.create_index("ix_job_type", "job", ["type"])
+    op.create_index("ix_job_version", "job", ["version"])
+
+    op.create_table(
+        "job_dispatch_outbox",
+        sa.Column("outbox_id", sa.Uuid(), nullable=False),
+        sa.Column("job_id", sa.Uuid(), nullable=False),
+        sa.Column("type", sa.String(length=255), nullable=False),
+        sa.Column("version", sa.String(length=32), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("next_attempt_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("last_error", sa.String(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("dispatched_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["job_id"], ["job.job_id"]),
+        sa.PrimaryKeyConstraint("outbox_id"),
+    )
+    op.create_index("ix_job_dispatch_outbox_job_id", "job_dispatch_outbox", ["job_id"])
+    op.create_index(
+        "ix_job_dispatch_outbox_status",
+        "job_dispatch_outbox",
+        ["status"],
+    )
 
     op.create_table(
         "event",
@@ -92,7 +116,12 @@ def downgrade() -> None:
     op.drop_index("ix_event_job_event_type", table_name="event")
     op.drop_table("event")
 
-    op.drop_index("ix_job_job_type", table_name="job")
-    op.drop_index("ix_job_job_status", table_name="job")
-    op.drop_index("ix_job_job_name", table_name="job")
+    op.drop_index("ix_job_dispatch_outbox_status", table_name="job_dispatch_outbox")
+    op.drop_index("ix_job_dispatch_outbox_job_id", table_name="job_dispatch_outbox")
+    op.drop_table("job_dispatch_outbox")
+
+    op.drop_index("ix_job_version", table_name="job")
+    op.drop_index("ix_job_type", table_name="job")
+    op.drop_index("ix_job_status", table_name="job")
+    op.drop_index("ix_job_name", table_name="job")
     op.drop_table("job")

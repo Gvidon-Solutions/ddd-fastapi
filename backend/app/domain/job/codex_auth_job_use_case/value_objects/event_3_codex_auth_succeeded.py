@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from app.domain.job.base.entities import JobEvent, JobEventPayload
 from app.domain.job.base.value_objects import JobEventType
-from app.domain.job.codex_auth_job_use_case.value_objects.codex_auth_job_result import (
+from app.domain.job.codex_auth_job_use_case.value_objects.contracts import (
     CodexAuthJobResult,
 )
 

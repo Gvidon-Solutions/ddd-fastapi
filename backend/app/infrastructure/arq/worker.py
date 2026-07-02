@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -9,13 +10,19 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.config import settings
 from app.infrastructure.arq.deps import (
     ARQ_ARTIFACT_STORAGE,
+    ARQ_CODEX_AUTH_SESSION,
     ARQ_CODEX_AUTHENTICATOR,
     ARQ_DB_ENGINE,
 )
-from app.infrastructure.arq.jobs import codex_run, execute_codex_auth_job_use_case
+from app.infrastructure.arq.job_workers import worker_bindings
 from app.infrastructure.arq.settings import arq_redis_settings
-from app.infrastructure.codex import new_codex_authenticator
+from app.infrastructure.codex import (
+    new_codex_authenticator,
+    new_redis_codex_auth_session_store,
+)
 from app.infrastructure.job_artifact_storage import new_filesystem_job_artifact_storage
+
+importlib.import_module("app.infrastructure.arq.jobs")
 
 
 async def on_startup(ctx: dict[str, Any]) -> None:
@@ -23,6 +30,7 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     ctx[ARQ_DB_ENGINE] = create_async_engine(str(settings.SQLALCHEMY_DATABASE_URI))
     ctx[ARQ_ARTIFACT_STORAGE] = new_filesystem_job_artifact_storage()
     ctx[ARQ_CODEX_AUTHENTICATOR] = new_codex_authenticator()
+    ctx[ARQ_CODEX_AUTH_SESSION] = new_redis_codex_auth_session_store()
 
 
 async def on_shutdown(ctx: dict[str, Any]) -> None:
@@ -35,7 +43,7 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
 class WorkerSettings:
     """Configure the ARQ worker process."""
 
-    functions = [execute_codex_auth_job_use_case, codex_run]
+    functions = worker_bindings.functions()
     on_startup = on_startup
     on_shutdown = on_shutdown
     redis_settings = arq_redis_settings()

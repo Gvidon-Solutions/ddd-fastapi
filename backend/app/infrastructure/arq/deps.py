@@ -23,6 +23,7 @@ from app.infrastructure.sqlmodel.job.job_repository import JobRepositoryImpl
 ARQ_DB_ENGINE = "db_engine"
 ARQ_ARTIFACT_STORAGE = "artifact_storage"
 ARQ_CODEX_AUTHENTICATOR = "codex_authenticator"
+ARQ_CODEX_AUTH_SESSION = "codex_auth_session"
 
 
 class AutocommitJobRepository(JobRepositoryImpl):
@@ -37,6 +38,30 @@ class AutocommitJobRepository(JobRepositoryImpl):
         """Save and commit a job."""
         await super().save(job)
         await self.session.commit()
+
+    async def try_mark_running(self, *args, **kwargs) -> bool:
+        """Mark running and commit."""
+        result = await super().try_mark_running(*args, **kwargs)
+        await self.session.commit()
+        return result
+
+    async def try_mark_succeeded(self, *args, **kwargs) -> bool:
+        """Mark succeeded and commit."""
+        result = await super().try_mark_succeeded(*args, **kwargs)
+        await self.session.commit()
+        return result
+
+    async def try_mark_failed(self, *args, **kwargs) -> bool:
+        """Mark failed and commit."""
+        result = await super().try_mark_failed(*args, **kwargs)
+        await self.session.commit()
+        return result
+
+    async def try_mark_cancelled(self, *args, **kwargs) -> bool:
+        """Mark cancelled and commit."""
+        result = await super().try_mark_cancelled(*args, **kwargs)
+        await self.session.commit()
+        return result
 
 
 class AutocommitJobArtifactRepository(JobArtifactRepositoryImpl):

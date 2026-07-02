@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from .value_objects import (
+    CodexRunInputV1,
+    CodexRunJobV1,
+    CodexRunResultV1,
     Event1CodexRunStarted,
     Event1CodexRunStartedPayload,
     Event2CodexRunArtifactCreated,
@@ -24,6 +27,9 @@ from .value_objects import (
 )
 
 __all__ = (
+    "CodexRunInputV1",
+    "CodexRunJobV1",
+    "CodexRunResultV1",
     "Event1CodexRunStarted",
     "Event1CodexRunStartedPayload",
     "Event2CodexRunArtifactCreated",
