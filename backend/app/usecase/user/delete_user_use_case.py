@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from app.domain.job import JobQueryRepository, JobRepository
+from app.domain.job import JobRepository
 from app.domain.user.entities import User
 from app.domain.user.exceptions import (
     SuperuserSelfDeletionError,
@@ -28,12 +28,10 @@ class DeleteUserUseCaseImpl(DeleteUserUseCase):
         self,
         user_repository: UserRepository,
         job_repository: JobRepository | None = None,
-        job_query_repository: JobQueryRepository | None = None,
     ):
         """Store use case dependencies."""
         self.user_repository = user_repository
         self.job_repository = job_repository
-        self.job_query_repository = job_query_repository
 
     async def execute(self, current_user: User, user_id: UserId) -> None:
         """Delete a user when access rules allow it."""
@@ -49,7 +47,6 @@ class DeleteUserUseCaseImpl(DeleteUserUseCase):
         await _delete_user_jobs(
             user_id=user_id,
             job_repository=self.job_repository,
-            job_query_repository=self.job_query_repository,
         )
         await self.user_repository.delete(user_id)
 
@@ -57,13 +54,11 @@ class DeleteUserUseCaseImpl(DeleteUserUseCase):
 def new_delete_user_use_case(
     user_repository: UserRepository,
     job_repository: JobRepository | None = None,
-    job_query_repository: JobQueryRepository | None = None,
 ) -> DeleteUserUseCase:
     """Instantiate the administrator user delete use case."""
     return DeleteUserUseCaseImpl(
         user_repository,
         job_repository=job_repository,
-        job_query_repository=job_query_repository,
     )
 
 
@@ -71,10 +66,9 @@ async def _delete_user_jobs(
     *,
     user_id: UserId,
     job_repository: JobRepository | None,
-    job_query_repository: JobQueryRepository | None,
 ) -> None:
-    if job_repository is None or job_query_repository is None:
+    if job_repository is None:
         return
-    summaries = await job_query_repository.list_by_initiator(str(user_id))
+    summaries = await job_repository.list_by_initiator(str(user_id))
     for summary in summaries:
         await job_repository.delete(summary.id, cascade_children=True)

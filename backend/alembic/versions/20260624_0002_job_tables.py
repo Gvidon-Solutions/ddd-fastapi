@@ -118,7 +118,7 @@ def upgrade() -> None:
         sa.Column("file_id", sa.Uuid(), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("kind", sa.String(length=32), nullable=False),
-        sa.Column("location", sa.JSON(), nullable=False),
+        sa.Column("location_uri", sa.String(length=4096), nullable=False),
         sa.Column("metadata", sa.JSON(), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("delete_requested_at", sa.DateTime(timezone=True), nullable=True),

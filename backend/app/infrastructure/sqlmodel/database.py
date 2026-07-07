@@ -8,8 +8,9 @@ from app.domain.user.value_objects import EmailAddress
 from app.infrastructure.di.injection import engine
 from app.infrastructure.security import new_password_hasher
 from app.infrastructure.sqlmodel.event import EventDTO, JobEventLinkDTO
+from app.infrastructure.sqlmodel.file import FileDTO
 from app.infrastructure.sqlmodel.item import ItemDTO
-from app.infrastructure.sqlmodel.job import FileDTO, InitiatorDTO, JobDTO, JobFileDTO
+from app.infrastructure.sqlmodel.job import InitiatorDTO, JobDTO, JobFileDTO
 from app.infrastructure.sqlmodel.user import UserDTO, new_user_repository
 from app.usecase.user import new_create_user_use_case
 

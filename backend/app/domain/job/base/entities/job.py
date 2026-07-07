@@ -32,6 +32,10 @@ class Job[InputT, ResultT]:
     started_at: datetime | None
     finished_at: datetime | None
     error: JobError | None
+    dispatch_attempts: int = 0
+    next_dispatch_at: datetime | None = None
+    last_dispatch_error: str | None = None
+    dispatched_at: datetime | None = None
 
 
 type AnyJob = Job[object, object]

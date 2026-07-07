@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from app.domain.job import JobQueryRepository, JobRepository
+from app.domain.job import JobRepository
 from app.domain.user.entities import User
 from app.domain.user.repositories import UserRepository
 
@@ -22,20 +22,16 @@ class DeleteCurrentUserUseCaseImpl(DeleteCurrentUserUseCase):
         self,
         user_repository: UserRepository,
         job_repository: JobRepository | None = None,
-        job_query_repository: JobQueryRepository | None = None,
     ):
         """Store use case dependencies."""
         self.user_repository = user_repository
         self.job_repository = job_repository
-        self.job_query_repository = job_query_repository
 
     async def execute(self, current_user: User) -> None:
         """Delete the current user when domain rules allow it."""
         current_user.ensure_can_delete_self()
-        if self.job_repository is not None and self.job_query_repository is not None:
-            summaries = await self.job_query_repository.list_by_initiator(
-                str(current_user.id)
-            )
+        if self.job_repository is not None:
+            summaries = await self.job_repository.list_by_initiator(str(current_user.id))
             for summary in summaries:
                 await self.job_repository.delete(summary.id, cascade_children=True)
         await self.user_repository.delete(current_user.id)
@@ -44,11 +40,9 @@ class DeleteCurrentUserUseCaseImpl(DeleteCurrentUserUseCase):
 def new_delete_current_user_use_case(
     user_repository: UserRepository,
     job_repository: JobRepository | None = None,
-    job_query_repository: JobQueryRepository | None = None,
 ) -> DeleteCurrentUserUseCase:
     """Instantiate the current-user delete use case."""
     return DeleteCurrentUserUseCaseImpl(
         user_repository,
         job_repository=job_repository,
-        job_query_repository=job_query_repository,
     )

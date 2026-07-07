@@ -29,7 +29,7 @@
 2. `ArqJobQueue.enqueue(job_type, job_id)` отправляет задачу в ARQ.
 3. В ARQ в качестве имени функции передается `job_type`.
 4. В `WorkerSettings.functions` вручную перечислены функции воркера, например
-   `execute_codex_auth_job_use_case` и `codex_run`.
+   `execute_codex_auth_job_use_case` и `execute_codex_run_job_use_case`.
 5. ARQ-функция получает `job_id`, загружает джобу из БД и вызывает нужный use
    case.
 
@@ -37,7 +37,7 @@
 
 - Для `codex_auth` уже есть `CodexAuthJobResult` как dataclass, но в БД итог все
   равно сохраняется как `result_summary: dict`.
-- `codex_run` читает `job.job_input` как свободный dict и возвращает dict.
+- `execute_codex_run_job_use_case` читает `job.job_input` как свободный dict и возвращает dict.
 - Для Codex-джоб есть dataclass-стадии, но они сохраняются в универсальное поле
   `job_stage`.
 
@@ -122,7 +122,7 @@ Implementation Slice 1 включает:
 
 - `Job[InputT, ResultT]`;
 - `JobContract`;
-- первые контракты `codex.auth v1` и `codex.run v1`;
+- первые контракты `execute_codex_auth_job_use_case v1` и `execute_codex_run_job_use_case v1`;
 - strict dataclass JSON codec;
 - domain `job_registry`;
 - worker binding registry/decorator;
@@ -131,8 +131,7 @@ Implementation Slice 1 включает:
   остается follow-up миграцией;
 - один `JobRepository` со strict typed `get(...)` и execution-specific lifecycle
   methods;
-- `job_dispatch_outbox`;
-- outbox dispatcher через `FOR UPDATE SKIP LOCKED`;
+- pending job dispatcher через `FOR UPDATE SKIP LOCKED`;
 - atomic lifecycle transitions;
 - `JobLauncher`;
 - `JobCancellationBackend`;
@@ -171,8 +170,8 @@ Follow-up миграции не должны блокировать первый
 Примеры:
 
 ```text
-codex.auth
-codex.run
+execute_codex_auth_job_use_case
+execute_codex_run_job_use_case
 ```
 
 `type` задается через стабильное имя use case, а не через физическое имя
@@ -186,7 +185,7 @@ input/result contract остаются теми же.
 Версия хранится отдельно:
 
 ```text
-type = "codex.run"
+type = "execute_codex_run_job_use_case"
 version = "v1"
 ```
 
@@ -288,7 +287,7 @@ class CodexRunResultV1:
 
 
 class CodexRunJobV1(JobContract[CodexRunInputV1, CodexRunResultV1]):
-    type: Literal["codex.run"] = "codex.run"
+    type: Literal["execute_codex_run_job_use_case"] = "execute_codex_run_job_use_case"
     version: Literal["v1"] = "v1"
     input = CodexRunInputV1
     result = CodexRunResultV1
@@ -414,7 +413,7 @@ Registry responsibilities:
 job_registry.register(CodexRunJobV1)
 
 contract = job_registry.get(
-    type="codex.run",
+    type="execute_codex_run_job_use_case",
     version="v1",
 )
 
@@ -825,54 +824,51 @@ write wins:
   terminal status;
 - если cancel успел записать `cancelled`, worker не переписывает status/result.
 
-## Job Dispatch Outbox
+## Pending Job Dispatch
 
 SQL transaction и Redis/ARQ enqueue не атомарны между собой. Поэтому launch не
 должен напрямую вызывать `JobQueue.enqueue(...)` после создания job.
 
-Постановка в очередь выполняется через durable `job_dispatch_outbox`.
+Постановка в очередь выполняется через саму durable `job` row:
+`status = pending` означает, что dispatcher еще должен enqueue-ить job в ARQ.
 
 Launch flow:
 
-1. В одной SQL transaction создать `job` со `status = queued`.
-2. В той же transaction создать `job_dispatch_outbox` row:
-   `job_id`, `type`, `version`, `status = pending`, `attempts = 0`.
-3. Commit.
-4. Outbox dispatcher/reconciler читает `pending` rows.
-5. Dispatcher резолвит worker binding и вызывает ARQ enqueue.
-6. Если enqueue успешен:
-   - `outbox.status = dispatched`;
-   - `outbox.dispatched_at = now`.
-7. Если binding отсутствует:
-   - `job` atomically updates `queued -> failed`;
+1. В одной SQL transaction создать `job` со `status = pending`.
+2. Commit.
+3. Job dispatcher/reconciler читает due `pending` jobs.
+4. Dispatcher резолвит worker binding и вызывает ARQ enqueue.
+5. Если enqueue успешен:
+   - `job.status = queued`;
+   - `job.dispatched_at = now`.
+6. Если binding отсутствует:
+   - `job` updates `pending -> failed`;
    - `JobError(code="worker_binding_missing")`;
-   - `outbox.status = failed`.
-8. Если Redis/ARQ временно недоступен:
-   - `attempts += 1`;
-   - `last_error = ...`;
-   - `next_attempt_at = backoff time`.
+   - `last_dispatch_error = ...`.
+7. Если Redis/ARQ временно недоступен:
+   - `dispatch_attempts += 1`;
+   - `last_dispatch_error = ...`;
+   - `next_dispatch_at = backoff time`.
 
-Dispatcher сам является reconciler-ом: он периодически читает `pending` rows с
-`next_attempt_at <= now`. Дополнительный maintenance repair path может искать
-`queued` jobs без non-terminal outbox row и создавать missing outbox row, но это
-не основной launch flow.
+Dispatcher сам является reconciler-ом: он периодически читает `pending` jobs с
+`next_dispatch_at is null or next_dispatch_at <= now`.
 
-Несколько dispatcher процессов могут работать параллельно. Pending rows должны
+Несколько dispatcher процессов могут работать параллельно. Pending jobs должны
 claim-иться через SQL transaction с `FOR UPDATE SKIP LOCKED`:
 
 ```sql
 select *
-from job_dispatch_outbox
+from job
 where status = 'pending'
-  and next_attempt_at <= now()
-order by next_attempt_at, created_at
+  and (next_dispatch_at is null or next_dispatch_at <= now())
+order by next_dispatch_at, requested_at
 for update skip locked
 limit :batch_size;
 ```
 
 В первой версии отдельные `locked_at` / `locked_by` columns не нужны. Row остается
-locked до тех пор, пока dispatcher не запишет `dispatched`, `failed` или pending
-backoff metadata и не commit-нет transaction. Если dispatcher process упал,
+locked до тех пор, пока dispatcher не запишет `queued`, `failed` или pending
+retry metadata и не commit-нет transaction. Если dispatcher process упал,
 database transaction rollback освобождает row для следующего dispatcher-а.
 
 ARQ idempotency:
@@ -882,14 +878,11 @@ ARQ _job_id = job_id
 ```
 
 Если `enqueue_job(...)` возвращает `None` из-за duplicate `_job_id`, dispatcher
-проверяет текущую job:
-
-- если job `queued` или `running`, outbox считается `dispatched`;
-- если job terminal, outbox тоже можно пометить `dispatched`, потому что durable
-  delivery intent больше не нужен.
+может считать job enqueue-нутой и перевести ее в `queued`, если она все еще
+`pending`.
 
 `JobQueue.enqueue(...)` не вызывается из API launch use case. Launch пишет только
-`job + outbox` в одной transaction.
+`job(status=pending)` в одной transaction.
 
 ## Progress И Промежуточные Данные
 
@@ -912,7 +905,7 @@ ARQ _job_id = job_id
 
 ## Codex Auth Session
 
-Для `codex.auth` текущий auth flow не должен использовать `job_stage`.
+Для `execute_codex_auth_job_use_case` текущий auth flow не должен использовать `job_stage`.
 
 Текущее состояние выдачи пользовательского кода хранится в отдельной
 transient read model `CodexAuthSession`, backed by Redis.
@@ -1357,20 +1350,20 @@ async def run_codex_job(ctx: dict, job_id: str) -> dict:
 
 1. Caller создает валидную доменную `Job` напрямую или через дополнительный
    конструктор на `Job`.
-2. `JobLauncher` принимает готовую `Job` и в одной SQL transaction сохраняет
-   `job + job_dispatch_outbox`.
-3. Outbox dispatcher резолвит `(job.type, job.version)` через domain
+2. `JobLauncher` принимает готовую `Job` и сохраняет ее со статусом `pending`.
+3. Job dispatcher резолвит `(job.type, job.version)` через domain
    `job_registry` и worker binding registry.
 4. Если binding существует, dispatcher передает ARQ физическое имя
-   зарегистрированной worker-функции и `job_id`.
-5. Если binding отсутствует, dispatcher переводит job `queued -> failed` с
+   зарегистрированной worker-функции и `job_id`, затем ставит `queued`.
+5. Если binding отсутствует, dispatcher переводит job `pending -> failed` с
    `JobError(code="worker_binding_missing")`.
-6. Worker загружает джобу, десериализует typed input, выполняет use case,
+6. Worker atomically claims `queued -> running`, загружает джобу,
+   десериализует typed input, выполняет use case,
    сохраняет typed successful result и обновляет status.
 
 Worker binding проверяется на двух уровнях:
 
-- primary validation выполняет outbox dispatcher перед enqueue;
+- primary validation выполняет job dispatcher перед enqueue;
 - worker-side validation остается defensive fallback для stale queue messages,
   deploy races и ручных ошибок.
 
@@ -1479,36 +1472,29 @@ check (finished_at is null or started_at is null or finished_at >= started_at);
 может случиться до старта worker-а: enqueue failure, missing binding, validation
 failure перед execution.
 
-Целевая таблица `job_dispatch_outbox`:
+Dispatch metadata живет на таблице `job`:
 
 ```text
-job_dispatch_outbox
+job
 ---
-outbox_id uuid primary key
-job_id uuid not null references job(job_id)
-type varchar not null
-version varchar not null
 status varchar not null
-attempts integer not null default 0
-next_attempt_at timestamptz not null
-last_error text null
-created_at timestamptz not null
-updated_at timestamptz not null
+dispatch_attempts integer not null default 0
+next_dispatch_at timestamptz null
+last_dispatch_error text null
 dispatched_at timestamptz null
 ```
 
-Outbox statuses:
+Dispatch-related job statuses:
 
 ```text
 pending
-dispatched
-failed
+queued
+running
 ```
 
 Рекомендуемые индексы:
 
-- `(status, next_attempt_at)`
-- `job_id`
+- `(status, next_dispatch_at)`
 
 Целевая таблица `initiator`:
 
@@ -1707,15 +1693,15 @@ job = CodexRunJobV1.new(
     description="Run Codex against a workspace",
 )
 
-await job_launcher.launch(job)
+await job_launcher.execute(job)
 
-completed_job = await job_launcher.launch_and_wait(job, timeout=120)
+completed_job = await job_launcher.wait(job.id, timeout=120)
 ```
 
 `CodexRunJobV1.new(...)` или аналогичный `new(...)` на contract class должен:
 
 - проверить, что `input` соответствует input dataclass этого контракта;
-- создать `Job` в статусе `queued`;
+- создать `Job` в статусе `pending`;
 - заполнить `type`, `version`, `input`, `initiator`, timestamps, optional
   `name`, optional `description` и optional `parent_job_id`.
 
@@ -1726,33 +1712,31 @@ completed_job = await job_launcher.launch_and_wait(job, timeout=120)
 
 - принять готовую доменную `Job`;
 - проверить, что `(job.type, job.version)` зарегистрирован;
-- сохранить `job + job_dispatch_outbox` в одной SQL transaction;
+- сохранить `job(status=pending)` в SQL transaction;
 - передать persistence-слою typed `initiator`; после follow-up extraction
   persistence маппит его в `initiator_id`;
 - не вызывать queue backend напрямую;
-- уметь дождаться завершения джобы, если caller-у нужен synchronous boundary.
+- не возвращать `job_id`, потому caller уже владеет `job.id`.
 
 ### Launch Transaction Boundary
 
-Launch использует durable `job_dispatch_outbox`. Прямой enqueue из API launch
+Launch использует durable `job(status=pending)`. Прямой enqueue из API launch
 use case запрещен.
 
-`JobLauncher.launch(job)` должен делать одну SQL transaction:
+`JobLauncher.execute(job)` должен делать одну SQL transaction:
 
-1. сохранить `Job` в SQL в статусе `queued`;
-2. сохранить `job_dispatch_outbox` row со `status = pending`;
-3. commit-нуть SQL transaction;
-4. вернуть `job_id` caller-у.
+1. сохранить `Job` в SQL в статусе `pending`;
+2. commit-нуть SQL transaction.
 
-Outbox dispatcher после commit-а:
+Job dispatcher после commit-а:
 
-- читает `pending` outbox rows;
+- читает due `pending` jobs;
 - резолвит worker binding;
 - вызывает `JobQueue.enqueue(job)`;
-- помечает outbox row как `dispatched` при успешном enqueue;
-- переводит job `queued -> failed` с `worker_binding_missing`, если binding
+- переводит job `pending -> queued` при успешном enqueue;
+- переводит job `pending -> failed` с `worker_binding_missing`, если binding
   отсутствует;
-- оставляет outbox row `pending` с backoff metadata, если queue backend временно
+- оставляет job `pending` с backoff metadata, если queue backend временно
   недоступен.
 
 Такой порядок нужен, чтобы worker не мог получить `job_id` раньше, чем строка
@@ -1764,20 +1748,16 @@ commit-а не оставлял job без durable dispatch intent.
 handle. `None` из-за duplicate `_job_id` обрабатывается dispatcher-ом
 idempotently через проверку текущего job status.
 
-Ожидание выполнения должно быть явным API, а не неявным поведением `launch`.
+Ожидание выполнения должно быть явным API, а не неявным поведением `execute`.
 Например:
 
 ```python
-job_id = await job_launcher.launch(job)
-completed_job = await job_launcher.wait(job_id, timeout=120)
-
-# или shortcut:
-completed_job = await job_launcher.launch_and_wait(job, timeout=120)
+await job_launcher.execute(job)
+completed_job = await job_launcher.wait(job.id, timeout=120)
 ```
 
-`wait(...)` / `launch_and_wait(...)` не выполняют джобу в текущем процессе.
-Они создают durable dispatch intent и ждут, пока worker переведет job в
-terminal status:
+`wait(...)` не выполняет джобу в текущем процессе. Он ждет, пока worker
+переведет job в terminal status:
 
 - `succeeded`;
 - `failed`;
@@ -1827,14 +1807,14 @@ Execution boundary должен:
 6. Добавить таблицу `initiator`.
 7. Ввести dataclass contracts для input/result каждой джобы.
 8. Ввести domain `job_registry` и ARQ worker binding decorator.
-9. Добавить `job_dispatch_outbox` и outbox dispatcher/reconciler.
+9. Добавить pending job dispatcher/reconciler.
 10. Переделать enqueue так, чтобы ARQ function name резолвился через worker
    binding registry, связанный с domain `job_registry`.
 11. Ввести atomic lifecycle repository methods для `queued -> running` и
     terminal transitions.
 12. Перенести progress/intermediate state из `job_stage` в events или typed read
     models.
-13. Для `codex.auth` заменить публичное имя `device_code` на `user_code` без
+13. Для `execute_codex_auth_job_use_case` заменить публичное имя `device_code` на `user_code` без
     backward compatibility и хранить `user_code` только в Redis
     `CodexAuthSession`.
 14. Ввести `event_registry`, typed event codec, `job_event.sequence` и
@@ -1856,11 +1836,11 @@ Execution boundary должен:
 Первые контракты:
 
 ```text
-codex.auth v1
+execute_codex_auth_job_use_case v1
 input: CodexAuthInputV1
 result: CodexAuthResultV1
 
-codex.run v1
+execute_codex_run_job_use_case v1
 input: CodexRunInputV1
 result: CodexRunResultV1
 ```

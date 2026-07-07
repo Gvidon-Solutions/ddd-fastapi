@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 from app.config import settings
-from app.domain.job import FileLocation, FileLocationType
+from app.domain.file import FileLocation
 from app.usecase.job.ports import FileStorage
 
 
@@ -26,16 +27,14 @@ class FilesystemFileStorage(FileStorage):
         self.root.mkdir(parents=True, exist_ok=True)
         if isinstance(content, Path) and self._is_stored_path(content):
             return FileLocation(
-                type=FileLocationType.FILESYSTEM,
-                uri=str(content),
+                uri=content.resolve().as_uri(),
             )
         content_bytes, source_path = self._content_bytes(content)
         filename = self._build_filename(metadata, source_path)
         path = self.root / filename
         path.write_bytes(content_bytes)
         return FileLocation(
-            type=FileLocationType.FILESYSTEM,
-            uri=str(path),
+            uri=path.resolve().as_uri(),
         )
 
     async def read(self, location: FileLocation) -> bytes:
@@ -83,9 +82,10 @@ class FilesystemFileStorage(FileStorage):
 
     def _path(self, location: FileLocation) -> Path:
         """Return a filesystem path for a file location."""
-        if location.type != FileLocationType.FILESYSTEM:
-            raise ValueError(f"Unsupported file location type: {location.type}")
-        return Path(location.uri)
+        parsed = urlparse(location.uri)
+        if parsed.scheme != "file":
+            raise ValueError(f"Unsupported file location URI: {location.uri}")
+        return Path(unquote(parsed.path))
 
 
 def new_filesystem_file_storage() -> FileStorage:

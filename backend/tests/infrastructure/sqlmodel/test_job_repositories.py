@@ -1,17 +1,13 @@
 """Job SQLModel repository tests."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
+from app.domain.file import File, FileKind, FileLocation, FileStatus
 from app.domain.job import (
     ActorType,
-    File,
-    FileKind,
-    FileLocation,
-    FileLocationType,
-    FileStatus,
     Initiator,
     Job,
     JobError,
@@ -21,21 +17,22 @@ from app.domain.job import (
     JobFileRole,
     JobStatus,
 )
-from app.domain.job.codex_auth_job_use_case import CodexAuthInputV1
-from app.infrastructure.sqlmodel.event import new_job_event_repository
-from app.infrastructure.sqlmodel.job import (
-    new_job_file_repository,
-    new_job_query_repository,
-    new_job_repository,
+from app.domain.job.codex_auth_job_use_case import (
+    CodexAuthInputV1,
+    CodexAuthJobV1,
+    CodexAuthResult,
+    Event3CodexAuthSucceeded,
+    Event3CodexAuthSucceededPayload,
 )
+from app.infrastructure.sqlmodel.job import new_job_repository
 
 pytestmark = pytest.mark.anyio
 
 
 def _job() -> Job:
-    return Job(
+    return CodexAuthJobV1(
         id=uuid4(),
-        type="codex.auth",
+        type="execute_codex_auth_job_use_case",
         version="v1",
         name="Codex auth",
         description=None,
@@ -58,8 +55,7 @@ def _file(name: str, *, created_at: datetime) -> File:
         name=name,
         kind=FileKind.FILE,
         location=FileLocation(
-            type=FileLocationType.FILESYSTEM,
-            uri=f"/tmp/{name}",
+            uri=f"file:///tmp/{name}",
         ),
         metadata={"filename": name},
         status=FileStatus.ACTIVE,
@@ -67,6 +63,30 @@ def _file(name: str, *, created_at: datetime) -> File:
         delete_attempts=0,
         last_delete_error=None,
         created_at=created_at,
+    )
+
+
+def _job_file(
+    *,
+    job_id: UUID,
+    file: File,
+    role: JobFileRole,
+) -> JobFile:
+    return JobFile(
+        file_id=file.file_id,
+        name=file.name,
+        kind=file.kind,
+        location=file.location,
+        metadata=file.metadata,
+        status=file.status,
+        delete_requested_at=file.delete_requested_at,
+        delete_attempts=file.delete_attempts,
+        last_delete_error=file.last_delete_error,
+        created_at=file.created_at,
+        job_id=job_id,
+        role=role,
+        description=None,
+        attached_at=file.created_at,
     )
 
 
@@ -96,39 +116,33 @@ async def test_job_repository_saves_job_changes(db_session) -> None:
     assert await repository.get(job.id) == job
 
 
-async def test_job_file_repository_lists_and_filters_files(db_session) -> None:
+async def test_job_repository_lists_and_filters_files(db_session) -> None:
     job_repository = new_job_repository(db_session)
-    file_repository = new_job_file_repository(db_session)
     job = _job()
     await job_repository.create(job)
-    output = JobFile(
+    output = _job_file(
         job_id=job.id,
         file=_file("output.txt", created_at=datetime(2026, 6, 23, tzinfo=UTC)),
         role=JobFileRole.OUTPUT,
-        description=None,
-        created_at=datetime(2026, 6, 23, tzinfo=UTC),
     )
-    log = JobFile(
+    log = _job_file(
         job_id=job.id,
         file=_file("stdout.log", created_at=datetime(2026, 6, 23, 1, tzinfo=UTC)),
         role=JobFileRole.LOG,
-        description=None,
-        created_at=datetime(2026, 6, 23, 1, tzinfo=UTC),
     )
-    await file_repository.create(output)
-    await file_repository.create(log)
+    await job_repository.add_file(output)
+    await job_repository.add_file(log)
     await db_session.commit()
 
-    outputs = await file_repository.list_by_job(job.id, role=JobFileRole.OUTPUT)
-    files = await file_repository.list_by_job(job.id)
+    outputs = await job_repository.list_files(job.id, role=JobFileRole.OUTPUT)
+    files = await job_repository.list_files(job.id)
 
     assert outputs == [output]
     assert files == [output, log]
 
 
-async def test_job_event_repository_appends_and_lists_events(db_session) -> None:
+async def test_job_repository_appends_and_lists_events(db_session) -> None:
     job_repository = new_job_repository(db_session)
-    event_repository = new_job_event_repository(db_session)
     job = _job()
     await job_repository.create(job)
     started = JobEvent(
@@ -137,7 +151,7 @@ async def test_job_event_repository_appends_and_lists_events(db_session) -> None
         source="job",
         version="v1",
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
-        payload=JobEventPayload(),
+        payload=JobEventPayload(job_id=job.id),
     )
     succeeded = JobEvent(
         event_id=uuid4(),
@@ -145,25 +159,46 @@ async def test_job_event_repository_appends_and_lists_events(db_session) -> None
         source="job",
         version="v1",
         created_at=datetime(2026, 6, 23, 1, tzinfo=UTC),
-        payload=JobEventPayload(),
+        payload=JobEventPayload(job_id=job.id),
     )
 
-    await event_repository.append(job.id, started)
-    await event_repository.append(job.id, succeeded)
+    await job_repository.append_event(job.id, started)
+    await job_repository.append_event(job.id, succeeded)
     await db_session.commit()
 
-    assert await event_repository.list_by_job(job.id) == [started, succeeded]
+    assert await job_repository.list_events(job.id) == [started, succeeded]
 
 
-async def test_job_query_repository_reads_detail_without_contract_get(db_session) -> None:
+async def test_job_repository_lists_typed_events(db_session) -> None:
     job_repository = new_job_repository(db_session)
-    query_repository = new_job_query_repository(db_session)
+    job = _job()
+    await job_repository.create(job)
+    event = Event3CodexAuthSucceeded(
+        created_at=datetime(2026, 6, 23, tzinfo=UTC),
+        payload=Event3CodexAuthSucceededPayload(
+            job_id=job.id,
+            summary=CodexAuthResult(authenticated=True),
+        ),
+    )
+
+    await job_repository.append_event(job.id, event)
+    await db_session.commit()
+
+    events = await job_repository.list_events(job.id)
+
+    assert events == [event]
+    assert isinstance(events[0], Event3CodexAuthSucceeded)
+    assert isinstance(events[0].payload, Event3CodexAuthSucceededPayload)
+
+
+async def test_job_repository_reads_typed_detail_without_contract_get(db_session) -> None:
+    job_repository = new_job_repository(db_session)
     job = _job()
     await job_repository.create(job)
     await db_session.commit()
 
-    detail = await query_repository.get_detail(job.id)
+    detail = await job_repository.get_detail(job.id)
 
-    assert detail.summary.id == job.id
-    assert detail.summary.initiator.external_id == "anton"
-    assert detail.input == {}
+    assert detail.id == job.id
+    assert detail.initiator.external_id == "anton"
+    assert type(detail.input) is CodexAuthInputV1

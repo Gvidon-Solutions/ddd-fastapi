@@ -1,7 +1,6 @@
 """User HTTP routes."""
 
 import uuid
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -65,7 +64,7 @@ def _full_name(value: str | None) -> FullName | None:
 )
 async def read_users(
     current_user: CurrentUser,
-    use_case: Annotated[FindUsersUseCase, Depends(get_find_users_use_case)],
+    use_case: FindUsersUseCase = Depends(get_find_users_use_case),
     skip: int = 0,
     limit: int = 100,
 ) -> UsersPublic:
@@ -89,8 +88,8 @@ async def read_users(
     response_model=UserPublic,
 )
 async def create_user(
-    use_case: Annotated[CreateUserUseCase, Depends(get_create_user_use_case)],
     user_in: UserCreate,
+    use_case: CreateUserUseCase = Depends(get_create_user_use_case),
 ) -> UserPublic:
     """Create a new user as an administrator."""
     try:
@@ -126,11 +125,10 @@ async def create_user(
 @router.patch("/me", response_model=UserPublic)
 async def update_user_me(
     current_user: CurrentUser,
-    use_case: Annotated[
-        UpdateCurrentUserUseCase,
-        Depends(get_update_current_user_use_case),
-    ],
     user_in: UserUpdateMe,
+    use_case: UpdateCurrentUserUseCase = Depends(
+        get_update_current_user_use_case,
+    ),
 ) -> UserPublic:
     """Update the current user's profile."""
     try:
@@ -154,11 +152,10 @@ async def update_user_me(
 @router.patch("/me/password", response_model=Message)
 async def update_password_me(
     current_user: CurrentUser,
-    use_case: Annotated[
-        UpdateCurrentUserPasswordUseCase,
-        Depends(get_update_current_user_password_use_case),
-    ],
     body: UpdatePassword,
+    use_case: UpdateCurrentUserPasswordUseCase = Depends(
+        get_update_current_user_password_use_case,
+    ),
 ) -> Message:
     """Update the current user's password."""
     try:
@@ -186,10 +183,7 @@ async def read_user_me(current_user: CurrentUser) -> UserPublic:
 @router.delete("/me", response_model=Message)
 async def delete_user_me(
     current_user: CurrentUser,
-    use_case: Annotated[
-        DeleteCurrentUserUseCase,
-        Depends(get_delete_current_user_use_case),
-    ],
+    use_case: DeleteCurrentUserUseCase = Depends(get_delete_current_user_use_case),
 ) -> Message:
     """Delete the current user."""
     try:
@@ -204,8 +198,8 @@ async def delete_user_me(
 
 @router.post("/signup", response_model=UserPublic)
 async def register_user(
-    use_case: Annotated[RegisterUserUseCase, Depends(get_register_user_use_case)],
     user_in: UserRegister,
+    use_case: RegisterUserUseCase = Depends(get_register_user_use_case),
 ) -> UserPublic:
     """Create a regular user without authentication."""
     try:
@@ -227,8 +221,8 @@ async def register_user(
 @router.get("/{user_id}", response_model=UserPublic)
 async def read_user_by_id(
     current_user: CurrentUser,
-    use_case: Annotated[FindUserByIdUseCase, Depends(get_find_user_by_id_use_case)],
     user_id: uuid.UUID,
+    use_case: FindUserByIdUseCase = Depends(get_find_user_by_id_use_case),
 ) -> UserPublic:
     """Get a specific user by id."""
     try:
@@ -250,9 +244,9 @@ async def read_user_by_id(
 )
 async def update_user(
     current_user: CurrentUser,
-    use_case: Annotated[UpdateUserUseCase, Depends(get_update_user_use_case)],
     user_id: uuid.UUID,
     user_in: UserUpdate,
+    use_case: UpdateUserUseCase = Depends(get_update_user_use_case),
 ) -> UserPublic:
     """Update a user as an administrator."""
     try:
@@ -293,8 +287,8 @@ async def update_user(
 )
 async def delete_user(
     current_user: CurrentUser,
-    use_case: Annotated[DeleteUserUseCase, Depends(get_delete_user_use_case)],
     user_id: uuid.UUID,
+    use_case: DeleteUserUseCase = Depends(get_delete_user_use_case),
 ) -> Message:
     """Delete a user as an administrator."""
     try:

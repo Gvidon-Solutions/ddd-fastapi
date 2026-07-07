@@ -1,17 +1,15 @@
 """Codex HTTP routes."""
 
-from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.domain.job import ActorType, Initiator
+from app.domain.job import Initiator
 from app.domain.job.codex_auth_job_use_case import CodexAuthInputV1, CodexAuthJobV1
 from app.domain.job.codex_run_job_use_case import CodexRunInputV1, CodexRunJobV1
-from app.domain.user.entities import User
 from app.infrastructure.di import (
-    get_codex_auth_code_and_url_use_case,
-    get_job_launcher,
+    get_codex_auth_code_use_case,
+    get_create_job_use_case,
 )
 from app.presentation.api.codex import (
     CodexAuthCodePublic,
@@ -23,8 +21,8 @@ from app.usecase.job import (
     CodexAuthCodeAccessDeniedError,
     CodexAuthCodeJobNotFoundError,
     CodexAuthCodeJobTypeError,
-    GetCodexAuthCodeAndUrlUseCase,
-    JobLauncher,
+    CreateJobUseCase,
+    GetCodexAuthCodeUseCase,
 )
 
 router = APIRouter(prefix="/codex", tags=["codex"])
@@ -33,17 +31,17 @@ router = APIRouter(prefix="/codex", tags=["codex"])
 @router.post("/auth", response_model=JobLaunchPublic)
 async def launch_codex_auth(
     current_user: CurrentUser,
-    launcher: Annotated[JobLauncher, Depends(get_job_launcher)],
+    create_job: CreateJobUseCase = Depends(get_create_job_use_case),
 ) -> JobLaunchPublic:
     """Queue a Codex device auth job."""
     job = CodexAuthJobV1.new(
-        initiator=_initiator_from_user(current_user),
+        initiator=Initiator.from_user(current_user),
         input=CodexAuthInputV1(),
         name="Codex auth",
         description="Authenticate Codex through device login",
     )
-    job_id = await launcher.launch(job)
-    return JobLaunchPublic(job_id=job_id)
+    await create_job.execute(job)
+    return JobLaunchPublic(job_id=job.id)
 
 
 @router.get(
@@ -53,11 +51,8 @@ async def launch_codex_auth(
 )
 async def get_codex_auth_code_and_url(
     current_user: CurrentUser,
-    use_case: Annotated[
-        GetCodexAuthCodeAndUrlUseCase,
-        Depends(get_codex_auth_code_and_url_use_case),
-    ],
     job_id: UUID,
+    use_case: GetCodexAuthCodeUseCase = Depends(get_codex_auth_code_use_case),
 ) -> CodexAuthCodePublic | Response:
     """Return Codex device auth URL and code once the auth job has produced them."""
     try:
@@ -71,7 +66,11 @@ async def get_codex_auth_code_and_url(
         raise HTTPException(status_code=400, detail="Job is not a Codex auth job")
     except CodexAuthCodeAccessDeniedError:
         raise HTTPException(status_code=403, detail="Job access denied")
-    if auth_code is None:
+    if (
+        auth_code is None
+        or not isinstance(auth_code.verification_url, str)
+        or not isinstance(auth_code.device_code, str)
+    ):
         return Response(status_code=204)
     return CodexAuthCodePublic(
         verification_url=auth_code.verification_url,
@@ -82,24 +81,15 @@ async def get_codex_auth_code_and_url(
 @router.post("/run", response_model=JobLaunchPublic)
 async def launch_codex_run(
     current_user: CurrentUser,
-    launcher: Annotated[JobLauncher, Depends(get_job_launcher)],
     body: CodexRunCreate,
+    create_job: CreateJobUseCase = Depends(get_create_job_use_case),
 ) -> JobLaunchPublic:
     """Queue a Codex run job."""
     job = CodexRunJobV1.new(
-        initiator=_initiator_from_user(current_user),
+        initiator=Initiator.from_user(current_user),
         input=CodexRunInputV1(prompt=body.prompt, workdir=body.workdir),
         name="Codex run",
         description="Run Codex against a workspace",
     )
-    job_id = await launcher.launch(job)
-    return JobLaunchPublic(job_id=job_id)
-
-
-def _initiator_from_user(user: User) -> Initiator:
-    """Build the root job initiator from the authenticated user."""
-    return Initiator(
-        type=ActorType.USER,
-        external_id=str(user.id),
-        display_name=user.email.value,
-    )
+    await create_job.execute(job)
+    return JobLaunchPublic(job_id=job.id)

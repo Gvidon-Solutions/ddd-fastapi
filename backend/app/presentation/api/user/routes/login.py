@@ -37,11 +37,8 @@ router = APIRouter(tags=["login"])
 
 @router.post("/login/access-token")
 async def login_access_token(
-    use_case: Annotated[
-        AuthenticateUserUseCase,
-        Depends(get_authenticate_user_use_case),
-    ],
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    use_case: AuthenticateUserUseCase = Depends(get_authenticate_user_use_case),
 ) -> Token:
     """OAuth2 compatible token login."""
     try:

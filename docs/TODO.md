@@ -11,8 +11,8 @@
 - Контракт job/use case должен возвращать `JobOutput` или другой typed output,
   а не голые `dict`.
 - Надо разобраться с `JobProjection`, `JobSummary`, `JobDetailProjection`:
-  кажется, это должно быть оформлено как отдельная domain/read-model
-  концепция, а не случайные классы рядом с repository port.
+  это должно быть оформлено как job value objects, а не случайные классы рядом
+  с repository port.
 - Нужен нормальный skill и `AGENTS.md`, которые будут регулировать структуру
   проекта и ревью.
 - Нужен DDD linter и отдельный reviewer skill, который сможет спаунить агента
@@ -27,55 +27,38 @@
 
 ## Job Domain Follow-Ups
 
-- Разобраться, зачем нужен `backend/app/domain/job/base/serialization.py`, и зафиксировать его роль:
-  - строгая сериализация typed job input/result в JSON для БД и очередей;
-  - строгая десериализация из persisted JSON обратно в dataclass contracts;
-  - раннее обнаружение schema drift, лишних полей и несовместимых типов;
-  - граница между domain contract и infrastructure persistence.
-  - проверить, не должен ли этот слой быть частью общего contract codec, а не
-    лежать в `domain/job/base`;
-  - решить, допускаем ли поддержку nested dataclass, enum, UUID, datetime,
-    collection types и version migration;
-  - описать, кто отвечает за ошибку сериализации: job contract, repository,
-    worker boundary или отдельный codec service;
-  - проверить, не надо ли заменить public `serialize_json`/`deserialize_json`
-    на более явный `JobContractCodec`.
-- Сделать `File` отдельным доменным item, а не только частью job domain:
-  - определить ownership и lifecycle;
-  - описать связи `JobFile` как link/association model;
-  - отделить storage metadata от доменной сущности файла.
-  - решить, где должен жить file domain: `domain/file`, shared kernel или
-    bounded context вокруг assets/storage;
-  - описать repository ports для `File`, `FileStorage`, delete lifecycle,
-    orphan cleanup и permissions;
-  - решить, может ли один `File` быть связан с несколькими jobs и другими
-    доменами;
-  - отделить immutable file content identity от mutable metadata/status;
-  - описать, что такое `FileKind.TEXT` vs `FileKind.FILE` и не является ли это
-    storage/detail, а не доменной моделью.
-- Разобраться с контрактом use case/job handler output:
-  - вместо голых `dict` возвращать typed `JobOutput`/`JobResult`;
-  - описать, кто и где переводит output в public API schema;
-  - запретить неструктурированные result payloads.
-  - проверить все `execute(...) -> dict` и заменить на typed response;
-  - разделить durable `Job.result`, immediate handler return value и public
-    HTTP response;
-  - решить, должен ли worker возвращать `JobOutput` в ARQ result или только
-    писать durable state;
-  - описать error output: typed failure result запрещен или вся ошибка только
-    через `JobError`;
-  - добавить тесты, которые ломаются при возврате raw dict из job use case.
-- Пересмотреть `JobProjection`, `JobSummary`, `JobDetailProjection`:
-  - решить, где они должны жить: domain, read model, application query layer;
-  - отделить executable domain entity от read-side projection;
-  - описать правила, когда projection может не десериализовать typed job contract.
-  - проверить, не должны ли projection классы лежать в `domain/job/base/read_models`
-    или `usecase/job/queries`, а repository port только ссылаться на них;
-  - договориться о naming: `Projection`, `ReadModel`, `View`, `Summary`;
-  - описать, какие поля projection обязаны иметь для UI/API;
-  - добавить projection для list screen, detail screen и timeline/events;
-  - решить, должны ли projections включать `files`, `events`, `output`,
-    `serialization_error` и raw payload.
+- Решение по job payload serialization:
+  - самописный `backend/app/domain/job/base/serialization.py` удален;
+  - job input/result остаются обычными stdlib dataclass contracts;
+  - JSON-compatible dump/load делает infrastructure helper
+    `backend/app/infrastructure/sqlmodel/job/payload_codec.py`;
+  - helper использует Pydantic `TypeAdapter` и временную pydantic dataclass
+    обертку с `extra="forbid"`;
+  - public `serialize_json`/`deserialize_json` из domain exports удалены;
+  - ошибки validation/serialization мапятся в `JobSerializationError`;
+  - отдельно решить, нужны ли version migrations для старых persisted payloads.
+- Решение по file domain:
+  - `File`, `FileKind`, `FileLocation`, `FileLocationType`, `FileStatus` и
+    `FileRepository` вынесены в `backend/app/domain/file`;
+  - `JobFile` остался в job domain как association/link model;
+  - SQLModel storage layout пока остается в `infrastructure/sqlmodel/job`,
+    потому что это текущая физическая схема таблиц;
+  - отдельно решить будущие правила orphan cleanup, permissions и связи одного
+    `File` с другими bounded contexts.
+- Решение по use case/job handler output:
+  - `CodexRunJobUseCase.execute(...)` возвращает typed `CodexRunOutput`;
+  - `CodexRunOutput` живет в domain contract
+    `backend/app/domain/job/codex_run_job_use_case/value_objects`;
+  - durable `Job.result` остается `CodexRunResultV1`;
+  - ARQ worker возвращает `CodexRunOutput`, а не голый `dict`;
+  - failure output не вводился: ошибки по-прежнему идут через `JobError`.
+- Решение по job query value objects:
+  - `JobSummary` и `JobDetailProjection` вынесены в
+    `backend/app/domain/job/base/value_objects`;
+  - `JobQueryRepository` теперь только repository port и ссылается на
+    value object classes;
+  - текущие detail/list projections оставлены без typed contract
+    deserialization.
 
 ## Project Conventions
 
@@ -118,7 +101,7 @@
   - naming conventions для job type, event type, logger name, queue name.
   - required файлы для новой job: contract, use case, ports, worker binding,
     tests, API launch schema/route if needed;
-  - `type` format: dot-separated stable string, например `codex.run`;
+  - `type` format: stable use case identifier, например `execute_codex_run_job_use_case`;
   - `version` format: `v1`, `v2`, без silent mutation старых payloads;
   - input/result dataclasses immutable или mutable: принять решение;
   - запрещены raw dict input/result, кроме projection/raw persistence layer;
@@ -177,9 +160,13 @@
 
 - Полностью описать и проверить flow создания job:
   - API создает typed contract job;
-  - `JobLauncher` сохраняет job и dispatch outbox row в одной транзакции;
-  - dispatcher резолвит worker по `(type, version)`;
-  - worker atomically claims job, исполняет use case, пишет result/error/events/files.
+  - `JobLauncher` сохраняет job со статусом `pending`;
+  - ARQ cron job `dispatch_pending_jobs` читает due pending jobs и резолвит
+    worker по `(type, version)`;
+  - dispatcher после успешного enqueue переводит job в `queued`;
+  - worker atomically claims `queued -> running`, исполняет use case, пишет
+    result/error/events/files.
+  - есть regression test: job dispatcher enqueue-ит pending job в fake queue;
   - проверить, что API не может создать job через raw `dict`;
   - проверить, что unknown contract не попадает в очередь;
   - проверить, что duplicate enqueue не запускает job дважды;
@@ -187,8 +174,7 @@
   - проверить, что `try_mark_running/succeeded/failed/cancelled` атомарны;
   - проверить, что failed serialization переводит job в failed с понятным
     `JobError`;
-  - проверить deletion cleanup для terminal jobs, files, events, outbox rows;
-  - добавить end-to-end тест с outbox dispatcher и fake queue.
+  - проверить deletion cleanup для terminal jobs, files, events;
 - Прокидывать под каждую job отдельный logger:
   - logger name содержит job type/version/job id;
   - логировать started/claimed/succeeded/failed/cancelled;

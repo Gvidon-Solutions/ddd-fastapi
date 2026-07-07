@@ -14,11 +14,11 @@ from app.domain.job import (
     JobError,
     JobSerializationError,
     JobStatus,
-    deserialize_json,
-    job_registry,
-    serialize_json,
+    UnknownJobContractError,
+    get_job_class,
 )
 from app.infrastructure.sqlmodel.datetime import ensure_datetime_utc, get_datetime_utc
+from app.infrastructure.sqlmodel.job.payload_codec import dump_payload, load_payload
 
 
 class JobDTO(SQLModel, table=True):
@@ -53,16 +53,28 @@ class JobDTO(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )
     error: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    dispatch_attempts: int = Field(default=0)
+    next_dispatch_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    last_dispatch_error: str | None = Field(default=None)
+    dispatched_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
 
     def to_entity(self, initiator) -> Job:
         """Convert this persistence DTO to a typed domain entity."""
-        contract = job_registry.get(type=self.type, version=self.version)
+        contract = get_job_class(type=self.type, version=self.version)
+        if contract is None:
+            raise UnknownJobContractError(f"Unknown job contract: {self.type} {self.version}")
         try:
-            input_obj = deserialize_json(self.input, contract.input)
+            input_obj = load_payload(self.input, contract.input)
             result_obj = None
             if self.result is not None:
                 if JobStatus(self.status) == JobStatus.SUCCEEDED:
-                    result_obj = deserialize_json(self.result, contract.result)
+                    result_obj = load_payload(self.result, contract.result)
                 else:
                     result_obj = self.result
         except JobSerializationError:
@@ -70,7 +82,7 @@ class JobDTO(SQLModel, table=True):
         except Exception as exc:
             raise JobSerializationError(str(exc)) from exc
 
-        return Job(
+        return contract(
             id=self.job_id,
             type=self.type,
             version=self.version,
@@ -90,6 +102,14 @@ class JobDTO(SQLModel, table=True):
             if self.finished_at is not None
             else None,
             error=_error_to_entity(self.error),
+            dispatch_attempts=self.dispatch_attempts,
+            next_dispatch_at=ensure_datetime_utc(self.next_dispatch_at)
+            if self.next_dispatch_at is not None
+            else None,
+            last_dispatch_error=self.last_dispatch_error,
+            dispatched_at=ensure_datetime_utc(self.dispatched_at)
+            if self.dispatched_at is not None
+            else None,
         )
 
     @staticmethod
@@ -111,6 +131,10 @@ class JobDTO(SQLModel, table=True):
             started_at=job.started_at,
             finished_at=job.finished_at,
             error=_error_to_record(job.error),
+            dispatch_attempts=job.dispatch_attempts,
+            next_dispatch_at=job.next_dispatch_at,
+            last_dispatch_error=job.last_dispatch_error,
+            dispatched_at=job.dispatched_at,
         )
 
 
@@ -120,7 +144,7 @@ def _to_record(value) -> dict | None:
     if isinstance(value, dict):
         return value
     if is_dataclass(value):
-        serialized = serialize_json(value)
+        serialized = dump_payload(value)
         if not isinstance(serialized, dict):
             raise JobSerializationError("Expected dataclass to serialize to object")
         return serialized

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from .value_objects import (
+from app.domain.job.codex_run_job_use_case.entities import CodexRunJobV1
+from app.domain.job.codex_run_job_use_case.value_objects import (
     CodexRunInputV1,
-    CodexRunJobV1,
-    CodexRunResultV1,
+    CodexRunOutput,
     Event1CodexRunStarted,
     Event1CodexRunStartedPayload,
     Event2CodexRunFileCreated,
@@ -21,7 +21,7 @@ from .value_objects import (
 __all__ = (
     "CodexRunInputV1",
     "CodexRunJobV1",
-    "CodexRunResultV1",
+    "CodexRunOutput",
     "Event1CodexRunStarted",
     "Event1CodexRunStartedPayload",
     "Event2CodexRunFileCreated",

@@ -3,25 +3,18 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.domain.job import (
-    Job,
-    JobEvent,
-    JobFile,
-)
-from app.infrastructure.sqlmodel.event.job_event_repository import (
-    JobEventRepositoryImpl,
-)
-from app.infrastructure.sqlmodel.job.job_file_repository import JobFileRepositoryImpl
+from app.domain.job import Job, JobEvent, JobFile
 from app.infrastructure.sqlmodel.job.job_repository import JobRepositoryImpl
 
 ARQ_DB_ENGINE = "db_engine"
 ARQ_FILE_STORAGE = "file_storage"
 ARQ_CODEX_AUTHENTICATOR = "codex_authenticator"
-ARQ_CODEX_AUTH_SESSION = "codex_auth_session"
+ARQ_CODEX_AUTH_SESSION_REPOSITORY = "codex_auth_session_repository"
 
 
 class AutocommitJobRepository(JobRepositoryImpl):
@@ -35,6 +28,16 @@ class AutocommitJobRepository(JobRepositoryImpl):
     async def save(self, job: Job) -> None:
         """Save and commit a job."""
         await super().save(job)
+        await self.session.commit()
+
+    async def add_file(self, job_file: JobFile) -> None:
+        """Associate a file and commit."""
+        await super().add_file(job_file)
+        await self.session.commit()
+
+    async def append_event(self, job_id: UUID, event: JobEvent) -> None:
+        """Append an event and commit."""
+        await super().append_event(job_id, event)
         await self.session.commit()
 
     async def try_mark_running(self, *args, **kwargs) -> bool:
@@ -62,24 +65,6 @@ class AutocommitJobRepository(JobRepositoryImpl):
         return result
 
 
-class AutocommitJobFileRepository(JobFileRepositoryImpl):
-    """Job file repository that commits every write."""
-
-    async def create(self, job_file: JobFile) -> None:
-        """Create and commit a job-file association."""
-        await super().create(job_file)
-        await self.session.commit()
-
-
-class AutocommitJobEventRepository(JobEventRepositoryImpl):
-    """Job event repository that commits every append."""
-
-    async def append(self, job_id, event: JobEvent) -> None:
-        """Append and commit an event."""
-        await super().append(job_id, event)
-        await self.session.commit()
-
-
 def get_arq_db_engine(ctx: dict[str, Any]) -> AsyncEngine:
     """Return the ARQ worker database engine."""
     return ctx[ARQ_DB_ENGINE]
@@ -88,15 +73,3 @@ def get_arq_db_engine(ctx: dict[str, Any]) -> AsyncEngine:
 def new_arq_job_repository(session: AsyncSession) -> AutocommitJobRepository:
     """Create an ARQ job repository."""
     return AutocommitJobRepository(session)
-
-
-def new_arq_job_file_repository(
-    session: AsyncSession,
-) -> AutocommitJobFileRepository:
-    """Create an ARQ job file repository."""
-    return AutocommitJobFileRepository(session)
-
-
-def new_arq_job_event_repository(session: AsyncSession) -> AutocommitJobEventRepository:
-    """Create an ARQ job event repository."""
-    return AutocommitJobEventRepository(session)

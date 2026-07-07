@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     ARQ_QUEUE_NAME: str = "skills-dddpy-tasks"
     ARQ_JOB_TIMEOUT_SECONDS: int = 60 * 60
     ARQ_RESULT_TTL_SECONDS: int = 60 * 60
+    JOB_DISPATCH_BATCH_SIZE: int = 100
     JOB_FILE_STORAGE_DIRECTORY: str = str(
         REPO_ROOT
         / "backend"

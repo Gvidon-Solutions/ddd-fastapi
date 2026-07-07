@@ -1,7 +1,6 @@
 """Item HTTP routes."""
 
 import uuid
-from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -45,7 +44,7 @@ def _map_item_error(error: Exception) -> HTTPException:
 @router.get("/", response_model=ItemsPublic)
 async def read_items(
     current_user: CurrentUser,
-    use_case: Annotated[FindItemsUseCase, Depends(get_find_items_use_case)],
+    use_case: FindItemsUseCase = Depends(get_find_items_use_case),
     skip: int = 0,
     limit: int = 100,
 ) -> ItemsPublic:
@@ -60,8 +59,8 @@ async def read_items(
 @router.get("/{id}", response_model=ItemPublic)
 async def read_item(
     current_user: CurrentUser,
-    use_case: Annotated[FindItemByIdUseCase, Depends(get_find_item_by_id_use_case)],
     id: uuid.UUID,
+    use_case: FindItemByIdUseCase = Depends(get_find_item_by_id_use_case),
 ) -> ItemPublic:
     """Get item by ID."""
     try:
@@ -74,8 +73,8 @@ async def read_item(
 @router.post("/", response_model=ItemPublic)
 async def create_item(
     current_user: CurrentUser,
-    use_case: Annotated[CreateItemUseCase, Depends(get_create_item_use_case)],
     item_in: ItemCreate,
+    use_case: CreateItemUseCase = Depends(get_create_item_use_case),
 ) -> ItemPublic:
     """Create a new item."""
     try:
@@ -92,9 +91,9 @@ async def create_item(
 @router.put("/{id}", response_model=ItemPublic)
 async def update_item(
     current_user: CurrentUser,
-    use_case: Annotated[UpdateItemUseCase, Depends(get_update_item_use_case)],
     id: uuid.UUID,
     item_in: ItemUpdate,
+    use_case: UpdateItemUseCase = Depends(get_update_item_use_case),
 ) -> ItemPublic:
     """Update an item."""
     try:
@@ -114,8 +113,8 @@ async def update_item(
 @router.delete("/{id}")
 async def delete_item(
     current_user: CurrentUser,
-    use_case: Annotated[DeleteItemUseCase, Depends(get_delete_item_use_case)],
     id: uuid.UUID,
+    use_case: DeleteItemUseCase = Depends(get_delete_item_use_case),
 ) -> Message:
     """Delete an item."""
     try:

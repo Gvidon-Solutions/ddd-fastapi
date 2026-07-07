@@ -3,30 +3,32 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
+
+from app.domain.file import File, FileKind, FileLocation, FileStatus
 from app.domain.job import (
     ActorType,
-    File,
-    FileKind,
-    FileLocation,
-    FileLocationType,
-    FileStatus,
     Initiator,
-    Job,
     JobError,
     JobEvent,
     JobEventPayload,
     JobFile,
     JobFileRole,
+    JobSerializationError,
     JobStatus,
 )
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthInputV1,
-    CodexAuthJobResult,
+    CodexAuthJobV1,
+    CodexAuthResult,
     Event3CodexAuthSucceeded,
     Event3CodexAuthSucceededPayload,
 )
+from app.domain.job.codex_run_job_use_case import CodexRunInputV1
 from app.infrastructure.sqlmodel.event import EventDTO
-from app.infrastructure.sqlmodel.job import FileDTO, JobDTO, JobFileDTO
+from app.infrastructure.sqlmodel.file import FileDTO
+from app.infrastructure.sqlmodel.job import JobDTO, JobFileDTO
+from app.infrastructure.sqlmodel.job.payload_codec import dump_payload, load_payload
 
 
 def test_job_dto_round_trips_entity_fields() -> None:
@@ -35,9 +37,9 @@ def test_job_dto_round_trips_entity_fields() -> None:
         external_id="anton",
         display_name="Anton",
     )
-    job = Job(
+    job = CodexAuthJobV1(
         id=uuid4(),
-        type="codex.auth",
+        type="execute_codex_auth_job_use_case",
         version="v1",
         name="Codex auth",
         description="Authenticate Codex",
@@ -63,14 +65,34 @@ def test_job_dto_round_trips_entity_fields() -> None:
     assert entity == job
 
 
+def test_payload_codec_round_trips_stdlib_dataclass_type() -> None:
+    payload = CodexRunInputV1(prompt="Review repository")
+
+    record = dump_payload(payload)
+    entity = load_payload(record, CodexRunInputV1)
+
+    assert record == {"prompt": "Review repository", "workdir": None}
+    assert type(entity) is CodexRunInputV1
+    assert entity == payload
+
+
+def test_payload_codec_rejects_unknown_fields() -> None:
+    with pytest.raises(JobSerializationError) as exc:
+        load_payload(
+            {"prompt": "Review repository", "unexpected": True},
+            CodexRunInputV1,
+        )
+
+    assert "Unexpected keyword argument" in str(exc.value)
+
+
 def test_file_and_job_file_dtos_round_trip_entity_fields() -> None:
     file = File(
         file_id=uuid4(),
         name="report.txt",
         kind=FileKind.FILE,
         location=FileLocation(
-            type=FileLocationType.FILESYSTEM,
-            uri="/tmp/report.txt",
+            uri="file:///tmp/report.txt",
         ),
         metadata={"filename": "report.txt"},
         status=FileStatus.ACTIVE,
@@ -80,11 +102,20 @@ def test_file_and_job_file_dtos_round_trip_entity_fields() -> None:
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
     )
     job_file = JobFile(
+        file_id=file.file_id,
+        name=file.name,
+        kind=file.kind,
+        location=file.location,
+        metadata=file.metadata,
+        status=file.status,
+        delete_requested_at=file.delete_requested_at,
+        delete_attempts=file.delete_attempts,
+        last_delete_error=file.last_delete_error,
+        created_at=file.created_at,
         job_id=uuid4(),
-        file=file,
         role=JobFileRole.OUTPUT,
         description=None,
-        created_at=datetime(2026, 6, 23, tzinfo=UTC),
+        attached_at=datetime(2026, 6, 23, tzinfo=UTC),
     )
 
     file_entity = FileDTO.from_entity(file).to_entity()
@@ -95,13 +126,14 @@ def test_file_and_job_file_dtos_round_trip_entity_fields() -> None:
 
 
 def test_event_dto_round_trips_job_event_fields() -> None:
+    job_id = uuid4()
     event = JobEvent(
         event_id=uuid4(),
         type="JobFileCreatedV1",
         source="job",
         version="v1",
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
-        payload=JobEventPayload(),
+        payload=JobEventPayload(job_id=job_id),
     )
 
     entity = EventDTO.from_job_event(event).to_job_event()
@@ -109,11 +141,29 @@ def test_event_dto_round_trips_job_event_fields() -> None:
     assert entity == event
 
 
+def test_event_dto_preserves_unknown_job_event_payload() -> None:
+    job_id = uuid4()
+    event = JobEvent(
+        event_id=uuid4(),
+        type="UnknownJobEventV1",
+        source="job",
+        version="v1",
+        created_at=datetime(2026, 6, 23, tzinfo=UTC),
+        payload={"job_id": job_id, "file_id": "file-1"},
+    )
+
+    entity = EventDTO.from_job_event(event).to_job_event()
+
+    assert entity.event_id == event.event_id
+    assert entity.payload == {"job_id": str(job_id), "file_id": "file-1"}
+
+
 def test_event_dto_casts_to_typed_event_dataclass() -> None:
-    result = CodexAuthJobResult(authenticated=True)
+    job_id = uuid4()
+    result = CodexAuthResult(authenticated=True)
     event = Event3CodexAuthSucceeded(
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
-        payload=Event3CodexAuthSucceededPayload(summary=result),
+        payload=Event3CodexAuthSucceededPayload(job_id=job_id, summary=result),
     )
 
     entity = EventDTO.from_job_event(event).to_entity()

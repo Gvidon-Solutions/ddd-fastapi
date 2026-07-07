@@ -89,20 +89,6 @@ class CodexExecResult:
             return error_output
         return f"Codex CLI exited with code {self.return_code}"
 
-    def summary(
-        self,
-        *,
-        output_file_id: str | None,
-        generated_files: int,
-    ) -> dict:
-        """Return persisted Codex execution summary."""
-        return {
-            "output_file_id": output_file_id,
-            "log_files": self.diagnostic_file_count(),
-            "generated_files": generated_files,
-        }
-
-
 def _lines_to_bytes(lines: list[str]) -> bytes:
     return ("\n".join(lines) + "\n").encode()
 

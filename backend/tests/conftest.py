@@ -13,8 +13,9 @@ from app.domain.item.value_objects import ItemDescription, ItemTitle
 from app.domain.user.entities import User
 from app.domain.user.value_objects import EmailAddress, FullName, PasswordHash
 from app.infrastructure.sqlmodel.event import EventDTO, JobEventLinkDTO
+from app.infrastructure.sqlmodel.file import FileDTO
 from app.infrastructure.sqlmodel.item import ItemDTO
-from app.infrastructure.sqlmodel.job import FileDTO, InitiatorDTO, JobDTO, JobFileDTO
+from app.infrastructure.sqlmodel.job import InitiatorDTO, JobDTO, JobFileDTO
 from app.infrastructure.sqlmodel.user import UserDTO
 
 

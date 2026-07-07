@@ -1,4 +1,4 @@
-"""Redis-backed Codex auth session store."""
+"""Redis-backed Codex auth session repository."""
 
 from __future__ import annotations
 
@@ -6,26 +6,25 @@ import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID
 
 from arq.connections import ArqRedis, create_pool
 
 from app.config import settings
-from app.infrastructure.arq.settings import arq_redis_settings
-from app.usecase.job.codex import (
+from app.domain.job.codex_auth_job_use_case import (
     CodexAuthSession,
+    CodexAuthSessionRepository,
     CodexAuthSessionStatus,
-    CodexAuthSessionStore,
 )
+from app.infrastructure.arq.settings import arq_redis_settings
 
 
-class RedisCodexAuthSessionStore(CodexAuthSessionStore):
-    """Store Codex auth sessions in Redis."""
+class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
+    """Persist Codex auth sessions in Redis."""
 
     def __init__(
         self,
-        redis: Any | None = None,
+        redis: ArqRedis,
         *,
         pending_ttl_seconds: int = settings.CODEX_AUTH_SESSION_PENDING_TTL_SECONDS,
         terminal_ttl_seconds: int = settings.CODEX_AUTH_SESSION_TERMINAL_TTL_SECONDS,
@@ -84,10 +83,7 @@ class RedisCodexAuthSessionStore(CodexAuthSessionStore):
 
     async def get(self, job_id: UUID) -> CodexAuthSession | None:
         """Return a transient session when one exists."""
-        if self.redis is not None:
-            return await self._get(self.redis, job_id)
-        async with self._redis_pool() as redis:
-            return await self._get(redis, job_id)
+        return await self._get(self.redis, job_id)
 
     async def _mark_terminal(
         self,
@@ -118,19 +114,73 @@ class RedisCodexAuthSessionStore(CodexAuthSessionStore):
         ttl: int,
     ) -> None:
         payload = json.dumps(_session_to_record(session))
-        if self.redis is not None:
-            await self.redis.set(_key(job_id), payload, ex=ttl)
-            return
-        async with self._redis_pool() as redis:
-            await redis.set(_key(job_id), payload, ex=ttl)
+        await self.redis.set(_key(job_id), payload, ex=ttl)
 
-    async def _get(self, redis: Any, job_id: UUID) -> CodexAuthSession | None:
+    async def _get(self, redis: ArqRedis, job_id: UUID) -> CodexAuthSession | None:
         payload = await redis.get(_key(job_id))
         if payload is None:
             return None
         if isinstance(payload, bytes):
             payload = payload.decode()
         return _session_from_record(json.loads(payload))
+
+
+class RedisPoolCodexAuthSessionRepository(CodexAuthSessionRepository):
+    """Open Redis connections for Codex auth session operations."""
+
+    def __init__(
+        self,
+        *,
+        pending_ttl_seconds: int = settings.CODEX_AUTH_SESSION_PENDING_TTL_SECONDS,
+        terminal_ttl_seconds: int = settings.CODEX_AUTH_SESSION_TERMINAL_TTL_SECONDS,
+    ) -> None:
+        """Store TTL settings."""
+        self.pending_ttl_seconds = pending_ttl_seconds
+        self.terminal_ttl_seconds = terminal_ttl_seconds
+
+    async def save_pending(
+        self,
+        *,
+        job_id: UUID,
+        verification_url: str | None,
+        user_code: str | None,
+        expires_at: datetime,
+    ) -> None:
+        """Persist pending login data."""
+        async with self._redis_pool() as redis:
+            await self._repository(redis).save_pending(
+                job_id=job_id,
+                verification_url=verification_url,
+                user_code=user_code,
+                expires_at=expires_at,
+            )
+
+    async def mark_authenticated(self, job_id: UUID) -> None:
+        """Mark the session authenticated and clear sensitive fields."""
+        async with self._redis_pool() as redis:
+            await self._repository(redis).mark_authenticated(job_id)
+
+    async def mark_failed(self, job_id: UUID, error: str) -> None:
+        """Mark the session failed and clear sensitive fields."""
+        async with self._redis_pool() as redis:
+            await self._repository(redis).mark_failed(job_id, error)
+
+    async def mark_cancelled(self, job_id: UUID, reason: str) -> None:
+        """Mark the session cancelled and clear sensitive fields."""
+        async with self._redis_pool() as redis:
+            await self._repository(redis).mark_cancelled(job_id, reason)
+
+    async def get(self, job_id: UUID) -> CodexAuthSession | None:
+        """Return a transient session when one exists."""
+        async with self._redis_pool() as redis:
+            return await self._repository(redis).get(job_id)
+
+    def _repository(self, redis: ArqRedis) -> RedisCodexAuthSessionRepository:
+        return RedisCodexAuthSessionRepository(
+            redis,
+            pending_ttl_seconds=self.pending_ttl_seconds,
+            terminal_ttl_seconds=self.terminal_ttl_seconds,
+        )
 
     @asynccontextmanager
     async def _redis_pool(self) -> AsyncIterator[ArqRedis]:
@@ -176,6 +226,6 @@ def _session_from_record(record: dict) -> CodexAuthSession:
     )
 
 
-def new_redis_codex_auth_session_store() -> CodexAuthSessionStore:
-    """Create a Redis-backed Codex auth session store."""
-    return RedisCodexAuthSessionStore()
+def new_redis_codex_auth_session_repository() -> CodexAuthSessionRepository:
+    """Create a Redis-backed Codex auth session repository."""
+    return RedisPoolCodexAuthSessionRepository()

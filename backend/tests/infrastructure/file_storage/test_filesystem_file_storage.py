@@ -1,10 +1,11 @@
 """Filesystem file storage tests."""
 
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import pytest
 
-from app.domain.job import FileLocation, FileLocationType
+from app.domain.file import FileLocation
 from app.infrastructure.file_storage import FilesystemFileStorage
 
 pytestmark = pytest.mark.anyio
@@ -21,9 +22,9 @@ async def test_filesystem_file_storage_writes_and_reads_bytes(
     )
     content = await storage.read(location)
 
-    assert location.type == FileLocationType.FILESYSTEM
-    assert Path(location.uri).parent == tmp_path
-    assert Path(location.uri).suffix == ".txt"
+    assert urlparse(location.uri).scheme == "file"
+    assert _path(location).parent == tmp_path
+    assert _path(location).suffix == ".txt"
     assert content == b"file bytes"
 
 
@@ -37,9 +38,9 @@ async def test_filesystem_file_storage_writes_path_content(
     location = await storage.write(content=source_path)
     content = await storage.read(location)
 
-    assert location.type == FileLocationType.FILESYSTEM
-    assert Path(location.uri).parent == tmp_path / "files"
-    assert Path(location.uri).suffix == ".md"
+    assert urlparse(location.uri).scheme == "file"
+    assert _path(location).parent == tmp_path / "files"
+    assert _path(location).suffix == ".md"
     assert content == b"file from path"
 
 
@@ -51,7 +52,7 @@ async def test_filesystem_file_storage_skips_copy_for_stored_path(
         content=b"already stored",
         metadata={"filename": "report.txt"},
     )
-    stored_path = Path(original_location.uri)
+    stored_path = _path(original_location)
 
     location = await storage.write(content=stored_path)
 
@@ -65,7 +66,7 @@ async def test_filesystem_file_storage_deletes_file(tmp_path: Path) -> None:
 
     await storage.delete(location)
 
-    assert not Path(location.uri).exists()
+    assert not _path(location).exists()
     with pytest.raises(FileNotFoundError):
         await storage.read(location)
 
@@ -75,11 +76,10 @@ async def test_filesystem_file_storage_rejects_non_filesystem_location(
 ) -> None:
     storage = FilesystemFileStorage(root=tmp_path)
 
-    with pytest.raises(ValueError, match="Unsupported file location type"):
+    with pytest.raises(ValueError, match="Unsupported file location URI"):
         await storage.read(
             FileLocation(
-                type="postgres",
-                uri="file-id",
+                uri="postgres://file-id",
             )
         )
 
@@ -89,10 +89,14 @@ async def test_filesystem_file_storage_rejects_delete_for_non_filesystem_locatio
 ) -> None:
     storage = FilesystemFileStorage(root=tmp_path)
 
-    with pytest.raises(ValueError, match="Unsupported file location type"):
+    with pytest.raises(ValueError, match="Unsupported file location URI"):
         await storage.delete(
             FileLocation(
-                type="postgres",
-                uri="file-id",
+                uri="postgres://file-id",
             )
         )
+
+
+def _path(location: FileLocation) -> Path:
+    parsed = urlparse(location.uri)
+    return Path(unquote(parsed.path))

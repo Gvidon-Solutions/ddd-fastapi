@@ -8,24 +8,18 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import settings
 from app.domain.item.repositories import ItemRepository
-from app.domain.job import (
-    JobEventRepository,
-    JobFileRepository,
-    JobQueryRepository,
-    JobRepository,
-)
+from app.domain.job import JobRepository
+from app.domain.job.codex_auth_job_use_case import CodexAuthSessionRepository
 from app.domain.user.repositories import UserRepository
-from app.infrastructure.arq import new_arq_job_queue, new_redis_job_cancellation_backend
-from app.infrastructure.codex import new_redis_codex_auth_session_store
+from app.infrastructure.arq import new_arq_job_runtime
+from app.infrastructure.codex import (
+    new_codex_authenticator,
+    new_redis_codex_auth_session_repository,
+)
 from app.infrastructure.file_storage import new_filesystem_file_storage
 from app.infrastructure.security import new_password_hasher
-from app.infrastructure.sqlmodel.event import new_job_event_repository
 from app.infrastructure.sqlmodel.item import new_item_repository
-from app.infrastructure.sqlmodel.job import (
-    new_job_file_repository,
-    new_job_query_repository,
-    new_job_repository,
-)
+from app.infrastructure.sqlmodel.job import new_job_repository
 from app.infrastructure.sqlmodel.user import new_user_repository
 from app.usecase.item import (
     CreateItemUseCase,
@@ -41,15 +35,16 @@ from app.usecase.item import (
 )
 from app.usecase.job import (
     CancelJobUseCase,
-    CodexAuthSessionStore,
+    CodexAuthenticator,
+    CodexAuthUseCase,
+    CreateJobUseCase,
     FileStorage,
-    GetCodexAuthCodeAndUrlUseCase,
-    JobCancellationBackend,
-    JobLauncher,
-    JobQueue,
+    GetCodexAuthCodeUseCase,
+    JobRuntime,
     new_cancel_job_use_case,
-    new_get_codex_auth_code_and_url_use_case,
-    new_job_launcher,
+    new_codex_auth_use_case,
+    new_create_job_use_case,
+    new_get_codex_auth_code_use_case,
 )
 from app.usecase.user import (
     AuthenticateUserUseCase,
@@ -110,35 +105,9 @@ def get_job_repository(
     return new_job_repository(session)
 
 
-def get_job_file_repository(
-    session: AsyncSession = Depends(get_session),
-) -> JobFileRepository:
-    """Provide a job-file repository."""
-    return new_job_file_repository(session)
-
-
-def get_job_query_repository(
-    session: AsyncSession = Depends(get_session),
-) -> JobQueryRepository:
-    """Provide a job query repository."""
-    return new_job_query_repository(session)
-
-
-def get_job_event_repository(
-    session: AsyncSession = Depends(get_session),
-) -> JobEventRepository:
-    """Provide a job event repository."""
-    return new_job_event_repository(session)
-
-
-def get_job_queue() -> JobQueue:
-    """Provide a job queue."""
-    return new_arq_job_queue()
-
-
-def get_job_cancellation_backend() -> JobCancellationBackend:
-    """Provide running-job cancellation backend."""
-    return new_redis_job_cancellation_backend()
+def get_job_runtime() -> JobRuntime:
+    """Provide a job runtime."""
+    return new_arq_job_runtime()
 
 
 def get_file_storage() -> FileStorage:
@@ -146,9 +115,14 @@ def get_file_storage() -> FileStorage:
     return new_filesystem_file_storage()
 
 
-def get_codex_auth_session_store() -> CodexAuthSessionStore:
-    """Provide transient Codex auth session storage."""
-    return new_redis_codex_auth_session_store()
+def get_codex_auth_session_repository() -> CodexAuthSessionRepository:
+    """Provide the Codex auth session repository."""
+    return new_redis_codex_auth_session_repository()
+
+
+def get_codex_authenticator() -> CodexAuthenticator:
+    """Provide the Codex device auth adapter."""
+    return new_codex_authenticator()
 
 
 def get_password_hasher() -> PasswordHasher:
@@ -164,23 +138,36 @@ def get_authenticate_user_use_case(
     return new_authenticate_user_use_case(user_repository, password_hasher)
 
 
-def get_job_launcher(
-    session: AsyncSession = Depends(get_session),
+def get_create_job_use_case(
     jobs: JobRepository = Depends(get_job_repository),
-) -> JobLauncher:
-    """Provide the typed job launcher."""
-    return new_job_launcher(
+) -> CreateJobUseCase:
+    """Provide the create-job use case."""
+    return new_create_job_use_case(jobs=jobs)
+
+
+def get_codex_auth_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+    codex_authenticator: CodexAuthenticator = Depends(get_codex_authenticator),
+    auth_sessions: CodexAuthSessionRepository = Depends(
+        get_codex_auth_session_repository
+    ),
+) -> CodexAuthUseCase:
+    """Provide the Codex auth use case."""
+    return new_codex_auth_use_case(
         jobs=jobs,
-        session=session,
+        codex_authenticator=codex_authenticator,
+        auth_sessions=auth_sessions,
     )
 
 
-def get_codex_auth_code_and_url_use_case(
+def get_codex_auth_code_use_case(
     jobs: JobRepository = Depends(get_job_repository),
-    auth_sessions: CodexAuthSessionStore = Depends(get_codex_auth_session_store),
-) -> GetCodexAuthCodeAndUrlUseCase:
+    auth_sessions: CodexAuthSessionRepository = Depends(
+        get_codex_auth_session_repository
+    ),
+) -> GetCodexAuthCodeUseCase:
     """Provide the Codex auth code polling use case."""
-    return new_get_codex_auth_code_and_url_use_case(
+    return new_get_codex_auth_code_use_case(
         jobs=jobs,
         auth_sessions=auth_sessions,
     )
@@ -188,14 +175,12 @@ def get_codex_auth_code_and_url_use_case(
 
 def get_cancel_job_use_case(
     jobs: JobRepository = Depends(get_job_repository),
-    queue: JobQueue = Depends(get_job_queue),
-    cancellation_backend: JobCancellationBackend = Depends(get_job_cancellation_backend),
+    runtime: JobRuntime = Depends(get_job_runtime),
 ) -> CancelJobUseCase:
     """Provide the cancel-job use case."""
     return new_cancel_job_use_case(
         jobs=jobs,
-        queue=queue,
-        cancellation_backend=cancellation_backend,
+        runtime=runtime,
     )
 
 
@@ -290,24 +275,20 @@ def get_update_user_use_case(
 def get_delete_current_user_use_case(
     user_repository: UserRepository = Depends(get_user_repository),
     job_repository: JobRepository = Depends(get_job_repository),
-    job_query_repository: JobQueryRepository = Depends(get_job_query_repository),
 ) -> DeleteCurrentUserUseCase:
     """Provide the current-user delete use case."""
     return new_delete_current_user_use_case(
         user_repository,
         job_repository=job_repository,
-        job_query_repository=job_query_repository,
     )
 
 
 def get_delete_user_use_case(
     user_repository: UserRepository = Depends(get_user_repository),
     job_repository: JobRepository = Depends(get_job_repository),
-    job_query_repository: JobQueryRepository = Depends(get_job_query_repository),
 ) -> DeleteUserUseCase:
     """Provide the admin delete-user use case."""
     return new_delete_user_use_case(
         user_repository,
         job_repository=job_repository,
-        job_query_repository=job_query_repository,
     )
