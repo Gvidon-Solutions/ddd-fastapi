@@ -19,8 +19,8 @@ from typing import Any
 
 import httpx
 
-ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "backend"
+BACKEND = Path(__file__).resolve().parents[1]
+ROOT = BACKEND.parent
 
 
 def main() -> int:
@@ -104,20 +104,20 @@ def main() -> int:
                     jobs = list_jobs(base_url, token)
                     assert any(job["id"] == job_id for job in jobs["data"])
 
-                    print(
-                        json.dumps(
+                    sys.stdout.write(
+                        f"{json.dumps(
                             {
-                                "job_id": job_id,
-                                "initial_status": pending_detail["status"],
-                                "final_status": final_detail["status"],
-                                "events": [
-                                    event["type"] for event in final_detail["events"]
+                                'job_id': job_id,
+                                'initial_status': pending_detail['status'],
+                                'final_status': final_detail['status'],
+                                'events': [
+                                    event['type'] for event in final_detail['events']
                                 ],
-                                "listed_jobs": jobs["count"],
+                                'listed_jobs': jobs['count'],
                             },
                             indent=2,
                             sort_keys=True,
-                        )
+                        )}\n"
                     )
 
                     terminate(worker)
@@ -437,8 +437,8 @@ def docker_rm(name: str) -> None:
 def dump_logs(tmp_path: Path) -> None:
     """Write captured process logs to stderr."""
     for log_path in sorted(tmp_path.glob("*.log")):
-        print(f"\n--- {log_path.name} ---", file=sys.stderr)
-        print(log_path.read_text(errors="replace")[-4000:], file=sys.stderr)
+        sys.stderr.write(f"\n--- {log_path.name} ---\n")
+        sys.stderr.write(f"{log_path.read_text(errors='replace')[-4000:]}\n")
 
 
 if __name__ == "__main__":
