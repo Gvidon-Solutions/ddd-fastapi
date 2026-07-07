@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from uuid import UUID, uuid4
 
 import pytest
 
@@ -18,6 +17,7 @@ from app.domain.job import (
     JobEvent,
     JobFile,
     JobFileRole,
+    JobId,
     JobRepository,
     JobStatus,
     JobSummary,
@@ -55,17 +55,17 @@ class FakeJobRepository(JobRepository):
     def __init__(self, job: Job):
         self.jobs = {job.id: job}
         self.files: list[JobFile] = []
-        self.events: list[tuple[UUID, JobEvent]] = []
+        self.events: list[tuple[JobId, JobEvent]] = []
 
     async def create(self, job: Job) -> None:
         """Create a job."""
         self.jobs[job.id] = job
 
-    async def get(self, job_id: UUID) -> Job:
+    async def get(self, job_id: JobId) -> Job:
         """Return a job."""
         return self.jobs[job_id]
 
-    async def get_detail(self, job_id: UUID) -> JobDetails:
+    async def get_detail(self, job_id: JobId) -> JobDetails:
         """Return job detail."""
         _ = job_id
         raise NotImplementedError
@@ -96,7 +96,7 @@ class FakeJobRepository(JobRepository):
 
     async def list_files(
         self,
-        job_id: UUID,
+        job_id: JobId,
         role: JobFileRole | None = None,
     ) -> list[JobFile]:
         """Return files for a job."""
@@ -105,11 +105,11 @@ class FakeJobRepository(JobRepository):
             files = [job_file for job_file in files if job_file.role == role]
         return files
 
-    async def append_event(self, job_id: UUID, event: JobEvent) -> None:
+    async def append_event(self, job_id: JobId, event: JobEvent) -> None:
         """Append an event."""
         self.events.append((job_id, event))
 
-    async def list_events(self, job_id: UUID) -> list[JobEvent]:
+    async def list_events(self, job_id: JobId) -> list[JobEvent]:
         """Return events for a job."""
         return [event for event_job_id, event in self.events if event_job_id == job_id]
 
@@ -155,14 +155,14 @@ class FakeAuthSessionRepository(CodexAuthSessionRepository):
 
     def __init__(self) -> None:
         self.session: CodexAuthSession | None = None
-        self.authenticated_job_id: UUID | None = None
-        self.failed: tuple[UUID, str] | None = None
-        self.cancelled: tuple[UUID, str] | None = None
+        self.authenticated_job_id: JobId | None = None
+        self.failed: tuple[JobId, str] | None = None
+        self.cancelled: tuple[JobId, str] | None = None
 
     async def save_pending(
         self,
         *,
-        job_id: UUID,
+        job_id: JobId,
         verification_url: str | None,
         user_code: str | None,
         expires_at: datetime,
@@ -180,19 +180,19 @@ class FakeAuthSessionRepository(CodexAuthSessionRepository):
             updated_at=now,
         )
 
-    async def mark_authenticated(self, job_id: UUID) -> None:
+    async def mark_authenticated(self, job_id: JobId) -> None:
         """Mark authenticated."""
         self.authenticated_job_id = job_id
 
-    async def mark_failed(self, job_id: UUID, error: str) -> None:
+    async def mark_failed(self, job_id: JobId, error: str) -> None:
         """Mark failed."""
         self.failed = (job_id, error)
 
-    async def mark_cancelled(self, job_id: UUID, reason: str) -> None:
+    async def mark_cancelled(self, job_id: JobId, reason: str) -> None:
         """Mark cancelled."""
         self.cancelled = (job_id, reason)
 
-    async def get(self, job_id: UUID) -> CodexAuthSession | None:
+    async def get(self, job_id: JobId) -> CodexAuthSession | None:
         """Return stored session."""
         if self.session is None or self.session.job_id != job_id:
             return None
@@ -266,7 +266,7 @@ class FakeCodexExecutor(CodexExecutor):
 def _codex_auth_job() -> CodexAuthJobV1:
     now = datetime(2026, 6, 23, tzinfo=UTC)
     return CodexAuthJobV1(
-        id=uuid4(),
+        id=JobId.generate(),
         type="execute_codex_auth_job_use_case",
         version="v1",
         name="execute_codex_auth_job_use_case",
@@ -287,7 +287,7 @@ def _codex_auth_job() -> CodexAuthJobV1:
 def _codex_run_job(job_input: CodexRunInputV1) -> CodexRunJobV1:
     now = datetime(2026, 6, 23, tzinfo=UTC)
     return CodexRunJobV1(
-        id=uuid4(),
+        id=JobId.generate(),
         type="execute_codex_run_job_use_case",
         version="v1",
         name="execute_codex_run_job_use_case",
@@ -397,7 +397,7 @@ async def test_codex_run_creates_output_and_log_files(tmp_path: Path) -> None:
     files_by_name = {job_file.name: job_file for job_file in output_files + primary_files}
     assert job.status == JobStatus.RUNNING
     assert output == CodexRunOutput(
-        output_file_id=str(files_by_name["codex_result.txt"].file_id),
+        output_file_id=files_by_name["codex_result.txt"].file_id,
         generated_files=1,
         log_files=2,
     )

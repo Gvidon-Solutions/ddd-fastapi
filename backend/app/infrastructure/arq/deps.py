@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.domain.job import Job, JobEvent, JobFile
+from app.domain.job import Job, JobEvent, JobFile, JobId
 from app.infrastructure.sqlmodel.job.job_repository import JobRepositoryImpl
 
 ARQ_DB_ENGINE = "db_engine"
@@ -35,7 +34,7 @@ class AutocommitJobRepository(JobRepositoryImpl):
         await super().add_file(job_file)
         await self.session.commit()
 
-    async def append_event(self, job_id: UUID, event: JobEvent) -> None:
+    async def append_event(self, job_id: JobId, event: JobEvent) -> None:
         """Append an event and commit."""
         await super().append_event(job_id, event)
         await self.session.commit()

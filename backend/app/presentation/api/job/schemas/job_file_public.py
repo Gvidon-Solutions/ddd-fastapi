@@ -23,12 +23,12 @@ class JobFilePublic(SQLModel):
     attached_at: datetime
     created_at: datetime
 
-    @staticmethod
-    def from_entity(job_file: JobFile) -> "JobFilePublic":
+    @classmethod
+    def from_entity(cls, job_file: JobFile) -> "JobFilePublic":
         """Build an API response from a domain entity."""
-        return JobFilePublic(
-            file_id=job_file.file_id,
-            job_id=job_file.job_id,
+        return cls(
+            file_id=job_file.file_id.value,
+            job_id=job_file.job_id.value,
             role=job_file.role.value,
             name=job_file.name,
             kind=job_file.kind.value,

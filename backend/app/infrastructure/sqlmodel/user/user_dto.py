@@ -48,10 +48,10 @@ class UserDTO(SQLModel, table=True):
             created_at=self.created_at or get_datetime_utc(),
         )
 
-    @staticmethod
-    def from_entity(user: User) -> "UserDTO":
+    @classmethod
+    def from_entity(cls, user: User) -> "UserDTO":
         """Build a persistence DTO from a domain entity."""
-        return UserDTO(
+        return cls(
             id=user.id.value,
             email=user.email.value,
             hashed_password=user.hashed_password.value,

@@ -10,6 +10,7 @@ from sqlmodel import Field, SQLModel
 
 from app.domain.file import (
     File,
+    FileId,
     FileKind,
     FileLocation,
     FileStatus,
@@ -45,7 +46,7 @@ class FileDTO(SQLModel, table=True):
     def to_entity(self) -> File:
         """Convert this DTO to a domain file."""
         return File(
-            file_id=self.file_id,
+            file_id=FileId(self.file_id),
             name=self.name,
             kind=FileKind(self.kind),
             location=FileLocation(
@@ -61,11 +62,11 @@ class FileDTO(SQLModel, table=True):
             created_at=ensure_datetime_utc(self.created_at),
         )
 
-    @staticmethod
-    def from_entity(file: File) -> FileDTO:
+    @classmethod
+    def from_entity(cls, file: File) -> FileDTO:
         """Build a DTO from a domain file."""
-        return FileDTO(
-            file_id=file.file_id,
+        return cls(
+            file_id=file.file_id.value,
             name=file.name,
             kind=file.kind.value,
             location_uri=file.location.uri,

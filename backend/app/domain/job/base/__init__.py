@@ -31,6 +31,7 @@ from .value_objects import (
     JobError,
     JobEventPayload,
     JobFileRole,
+    JobId,
     JobStatus,
 )
 from .value_objects.job_details import JobDetails
@@ -62,6 +63,7 @@ __all__ = (
     "JobExecutionRecord",
     "JobFile",
     "JobFileRole",
+    "JobId",
     "JobRepository",
     "JobSummary",
     "JobTypeRegistry",

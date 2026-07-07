@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_PASSWORD: str = "changethis"
 
     REDIS_URL: str = "redis://localhost:6379/0"
-    ARQ_QUEUE_NAME: str = "skills-dddpy-tasks"
+    ARQ_QUEUE_NAME: str = "agentops-backend-kit-tasks"
     ARQ_JOB_TIMEOUT_SECONDS: int = 60 * 60
     ARQ_RESULT_TTL_SECONDS: int = 60 * 60
     JOB_DISPATCH_BATCH_SIZE: int = 100

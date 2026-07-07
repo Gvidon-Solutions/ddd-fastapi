@@ -47,10 +47,10 @@ class ItemDTO(SQLModel, table=True):
             created_at=self.created_at or get_datetime_utc(),
         )
 
-    @staticmethod
-    def from_entity(item: Item) -> "ItemDTO":
+    @classmethod
+    def from_entity(cls, item: Item) -> "ItemDTO":
         """Build a persistence DTO from a domain entity."""
-        return ItemDTO(
+        return cls(
             id=item.id.value,
             owner_id=item.owner_id.value,
             title=item.title.value,

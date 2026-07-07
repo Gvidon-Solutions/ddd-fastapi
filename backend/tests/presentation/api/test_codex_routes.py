@@ -7,12 +7,13 @@ from fastapi import HTTPException, Response
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
-from app.domain.job import Job
+from app.domain.job import Job, JobId
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthInputV1,
     CodexDeviceAuth,
 )
 from app.domain.job.codex_run_job_use_case import CodexRunInputV1
+from app.domain.user.value_objects import UserId
 from app.infrastructure.di import (
     get_codex_auth_code_use_case,
     get_create_job_use_case,
@@ -57,12 +58,12 @@ class FakeGetCodexAuthCodeUseCase(GetCodexAuthCodeUseCase):
     ) -> None:
         self.result = result
         self.error = error
-        self.calls: list[tuple[UUID, str]] = []
+        self.calls: list[tuple[JobId, UserId]] = []
 
     async def execute(
         self,
-        job_id: UUID,
-        current_user_id: str,
+        job_id: JobId,
+        current_user_id: UserId,
     ) -> CodexDeviceAuth | None:
         """Return fixed auth code polling data."""
         self.calls.append((job_id, current_user_id))
@@ -78,7 +79,7 @@ async def test_launch_codex_auth_queues_auth_job(user) -> None:
 
     assert len(create_job.jobs) == 1
     job = create_job.jobs[0]
-    assert result.job_id == job.id
+    assert result.job_id == job.id.value
     assert job.type == "execute_codex_auth_job_use_case"
     assert job.name == "Codex auth"
     assert job.description == "Authenticate Codex through device login"
@@ -98,7 +99,7 @@ async def test_launch_codex_run_queues_run_job(user) -> None:
 
     assert len(create_job.jobs) == 1
     job = create_job.jobs[0]
-    assert result.job_id == job.id
+    assert result.job_id == job.id.value
     assert job.type == "execute_codex_run_job_use_case"
     assert job.name == "Codex run"
     assert job.description == "Run Codex against a workspace"
@@ -118,7 +119,7 @@ async def test_get_codex_auth_code_returns_empty_response_until_ready(user) -> N
 
     assert isinstance(result, Response)
     assert result.status_code == 204
-    assert use_case.calls == [(job_id, str(user.id))]
+    assert use_case.calls == [(JobId(job_id), user.id)]
 
 
 async def test_get_codex_auth_code_returns_code_when_ready(user) -> None:

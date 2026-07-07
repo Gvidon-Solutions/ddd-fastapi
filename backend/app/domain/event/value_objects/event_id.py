@@ -1,18 +1,18 @@
-"""Define the Item identifier value object."""
+"""Define the Event identifier value object."""
 
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 
 @dataclass(frozen=True)
-class ItemId:
-    """Represent the unique identifier for an item."""
+class EventId:
+    """Represent the unique identifier for an event."""
 
     value: UUID
 
     @classmethod
-    def generate(cls) -> "ItemId":
-        """Generate a new identifier for an item entity."""
+    def generate(cls) -> "EventId":
+        """Generate a new identifier for an event."""
         return cls(uuid4())
 
     def __str__(self) -> str:

@@ -1,11 +1,11 @@
 """Job SQLModel repository tests."""
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
 
 import pytest
 
-from app.domain.file import File, FileKind, FileLocation, FileStatus
+from app.domain.event import EventId
+from app.domain.file import File, FileId, FileKind, FileLocation, FileStatus
 from app.domain.job import (
     ActorType,
     Initiator,
@@ -15,6 +15,7 @@ from app.domain.job import (
     JobEventPayload,
     JobFile,
     JobFileRole,
+    JobId,
     JobStatus,
 )
 from app.domain.job.codex_auth_job_use_case import (
@@ -31,7 +32,7 @@ pytestmark = pytest.mark.anyio
 
 def _job() -> Job:
     return CodexAuthJobV1(
-        id=uuid4(),
+        id=JobId.generate(),
         type="execute_codex_auth_job_use_case",
         version="v1",
         name="Codex auth",
@@ -51,7 +52,7 @@ def _job() -> Job:
 
 def _file(name: str, *, created_at: datetime) -> File:
     return File(
-        file_id=uuid4(),
+        file_id=FileId.generate(),
         name=name,
         kind=FileKind.FILE,
         location=FileLocation(
@@ -68,7 +69,7 @@ def _file(name: str, *, created_at: datetime) -> File:
 
 def _job_file(
     *,
-    job_id: UUID,
+    job_id: JobId,
     file: File,
     role: JobFileRole,
 ) -> JobFile:
@@ -146,7 +147,7 @@ async def test_job_repository_appends_and_lists_events(db_session) -> None:
     job = _job()
     await job_repository.create(job)
     started = JobEvent(
-        event_id=uuid4(),
+        event_id=EventId.generate(),
         type="JobStartedV1",
         source="job",
         version="v1",
@@ -154,7 +155,7 @@ async def test_job_repository_appends_and_lists_events(db_session) -> None:
         payload=JobEventPayload(job_id=job.id),
     )
     succeeded = JobEvent(
-        event_id=uuid4(),
+        event_id=EventId.generate(),
         type="JobSucceededV1",
         source="job",
         version="v1",

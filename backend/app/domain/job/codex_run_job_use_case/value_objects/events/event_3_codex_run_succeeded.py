@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Literal
-from uuid import UUID, uuid4
 
+from app.domain.event import EventId
+from app.domain.file import FileId
 from app.domain.job.base.entities import JobEvent
 from app.domain.job.base.value_objects import JobEventPayload
 
@@ -14,7 +15,7 @@ from app.domain.job.base.value_objects import JobEventPayload
 class Event3CodexRunSucceededPayload(JobEventPayload):
     """Represent Codex run succeeded payload."""
 
-    output_file_id: str | None
+    output_file_id: FileId | None
     log_files: int
     generated_files: int
 
@@ -27,7 +28,7 @@ class Event3CodexRunSucceededPayload(JobEventPayload):
 class Event3CodexRunSucceeded(JobEvent):
     """Represent the Codex run succeeded event."""
 
-    event_id: UUID = field(default_factory=uuid4, init=False)
+    event_id: EventId = field(default_factory=EventId.generate, init=False)
     type: Literal["CodexRunSucceededV1"] = field(
         default="CodexRunSucceededV1",
         init=False,

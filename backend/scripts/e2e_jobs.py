@@ -34,10 +34,10 @@ def main() -> int:
     redis_port = free_port()
     api_port = free_port()
     suffix = f"{os.getpid()}-{int(time.time())}"
-    postgres_name = f"skills-dddpy-e2e-postgres-{suffix}"
-    redis_name = f"skills-dddpy-e2e-redis-{suffix}"
+    postgres_name = f"agentops-backend-kit-e2e-postgres-{suffix}"
+    redis_name = f"agentops-backend-kit-e2e-redis-{suffix}"
 
-    with tempfile.TemporaryDirectory(prefix="skills-dddpy-e2e-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="agentops-backend-kit-e2e-") as tmp:
         tmp_path = Path(tmp)
         fake_codex = write_fake_codex(tmp_path)
         env = e2e_env(
@@ -157,7 +157,7 @@ def e2e_env(
             "CODEX_CLI_PATH": str(fake_codex),
             "CODEX_JOB_WORKING_DIRECTORY": str(tmp_path / "codex-home"),
             "JOB_FILE_STORAGE_DIRECTORY": str(tmp_path / "files"),
-            "ARQ_QUEUE_NAME": f"skills-dddpy-e2e-{os.getpid()}",
+            "ARQ_QUEUE_NAME": f"agentops-backend-kit-e2e-{os.getpid()}",
         }
     )
     return env

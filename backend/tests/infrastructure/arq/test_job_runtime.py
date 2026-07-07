@@ -6,6 +6,7 @@ from uuid import UUID
 import pytest
 from arq.connections import ArqRedis
 
+from app.domain.job import JobId
 from app.infrastructure.arq import ArqJobRuntime
 
 pytestmark = pytest.mark.anyio
@@ -34,7 +35,7 @@ async def test_arq_job_runtime_enqueues_name_and_job_id_only() -> None:
     # Arrange
     redis = FakeArqRedis()
     runtime = ArqJobRuntime(redis=cast(ArqRedis, redis), queue_name="jobs")
-    job_id = UUID("11111111-1111-1111-1111-111111111111")
+    job_id = JobId(UUID("11111111-1111-1111-1111-111111111111"))
 
     # Act
     await runtime.enqueue(
@@ -57,7 +58,7 @@ async def test_arq_job_runtime_raises_when_arq_does_not_enqueue() -> None:
     with pytest.raises(RuntimeError, match="Job was not enqueued: codex_run"):
         await runtime.enqueue(
             job_type="codex_run",
-            job_id=UUID("11111111-1111-1111-1111-111111111111"),
+            job_id=JobId(UUID("11111111-1111-1111-1111-111111111111")),
         )
 
 
@@ -77,7 +78,7 @@ async def test_arq_job_runtime_cancels_by_domain_job_id(monkeypatch) -> None:
 
     redis = FakeArqRedis()
     runtime = ArqJobRuntime(redis=cast(ArqRedis, redis), queue_name="jobs")
-    job_id = UUID("11111111-1111-1111-1111-111111111111")
+    job_id = JobId(UUID("11111111-1111-1111-1111-111111111111"))
     monkeypatch.setattr("app.infrastructure.arq.job_runtime.Job", FakeArqJob)
 
     # Act
@@ -111,7 +112,7 @@ async def test_arq_job_runtime_awaits_terminal_result(monkeypatch) -> None:
 
     redis = FakeArqRedis()
     runtime = ArqJobRuntime(redis=cast(ArqRedis, redis), queue_name="jobs")
-    job_id = UUID("11111111-1111-1111-1111-111111111111")
+    job_id = JobId(UUID("11111111-1111-1111-1111-111111111111"))
     monkeypatch.setattr("app.infrastructure.arq.job_runtime.Job", FakeArqJob)
 
     # Act

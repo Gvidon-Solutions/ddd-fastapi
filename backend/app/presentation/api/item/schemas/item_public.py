@@ -17,10 +17,10 @@ class ItemPublic(SQLModel):
     description: str | None = Field(default=None, max_length=255)
     created_at: datetime | None = None
 
-    @staticmethod
-    def from_entity(item: Item) -> "ItemPublic":
+    @classmethod
+    def from_entity(cls, item: Item) -> "ItemPublic":
         """Build an API response from a domain entity."""
-        return ItemPublic(
+        return cls(
             id=item.id.value,
             owner_id=item.owner_id.value,
             title=item.title.value,

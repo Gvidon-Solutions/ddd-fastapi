@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Self, TypeVar
-from uuid import UUID, uuid4
 
 from app.domain.job.base.entities.job import Job
-from app.domain.job.base.value_objects import Initiator, JobStatus
+from app.domain.job.base.value_objects import Initiator, JobId, JobStatus
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -29,7 +28,7 @@ class JobContract[InputT, ResultT](Job[InputT, ResultT]):
         input: InputT,
         name: str | None = None,
         description: str | None = None,
-        parent_job_id: UUID | None = None,
+        parent_job_id: JobId | None = None,
     ) -> Self:
         """Create a pending job instance for this contract."""
         if not isinstance(input, cls.input):
@@ -37,7 +36,7 @@ class JobContract[InputT, ResultT](Job[InputT, ResultT]):
 
         now = datetime.now(UTC)
         return cls(
-            id=uuid4(),
+            id=JobId.generate(),
             type=cls.type,
             version=cls.version,
             name=name,

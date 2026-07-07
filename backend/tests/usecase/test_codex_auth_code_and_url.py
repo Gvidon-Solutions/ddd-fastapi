@@ -1,7 +1,7 @@
 """Codex auth code polling use case tests."""
 
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 
@@ -13,6 +13,7 @@ from app.domain.job import (
     JobEvent,
     JobFile,
     JobFileRole,
+    JobId,
     JobRepository,
     JobStatus,
     JobSummary,
@@ -25,6 +26,7 @@ from app.domain.job.codex_auth_job_use_case import (
     CodexAuthSessionStatus,
     CodexDeviceAuth,
 )
+from app.domain.user.value_objects import UserId
 from app.usecase.job import (
     CODEX_AUTH_JOB_TYPE,
     CodexAuthCodeAccessDeniedError,
@@ -36,24 +38,27 @@ from app.usecase.job import (
 
 pytestmark = pytest.mark.anyio
 
+USER_ID = UserId(UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+OTHER_USER_ID = UserId(UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+
 
 class FakeJobRepository(JobRepository):
     """Store jobs in memory."""
 
-    def __init__(self, jobs: dict[UUID, Job]) -> None:
+    def __init__(self, jobs: dict[JobId, Job]) -> None:
         self.jobs = jobs
 
     async def create(self, job: Job) -> None:
         """Create a job."""
         self.jobs[job.id] = job
 
-    async def get(self, job_id: UUID) -> Job:
+    async def get(self, job_id: JobId) -> Job:
         """Return a job."""
         if job_id not in self.jobs:
             raise KeyError(str(job_id))
         return self.jobs[job_id]
 
-    async def get_detail(self, job_id: UUID) -> JobDetails:
+    async def get_detail(self, job_id: JobId) -> JobDetails:
         """Return job detail."""
         _ = job_id
         raise NotImplementedError
@@ -84,18 +89,18 @@ class FakeJobRepository(JobRepository):
 
     async def list_files(
         self,
-        job_id: UUID,
+        job_id: JobId,
         role: JobFileRole | None = None,
     ) -> list[JobFile]:
         """Return no files."""
         _ = (job_id, role)
         return []
 
-    async def append_event(self, job_id: UUID, event: JobEvent) -> None:
+    async def append_event(self, job_id: JobId, event: JobEvent) -> None:
         """Append is unused by polling tests."""
         _ = (job_id, event)
 
-    async def list_events(self, job_id: UUID) -> list[JobEvent]:
+    async def list_events(self, job_id: JobId) -> list[JobEvent]:
         """Return no events."""
         _ = job_id
         return []
@@ -130,7 +135,7 @@ class FakeAuthSessionRepository(CodexAuthSessionRepository):
     async def save_pending(
         self,
         *,
-        job_id: UUID,
+        job_id: JobId,
         verification_url: str | None,
         user_code: str | None,
         expires_at: datetime,
@@ -148,16 +153,16 @@ class FakeAuthSessionRepository(CodexAuthSessionRepository):
             updated_at=now,
         )
 
-    async def mark_authenticated(self, job_id: UUID) -> None:
+    async def mark_authenticated(self, job_id: JobId) -> None:
         """Mark authenticated."""
 
-    async def mark_failed(self, job_id: UUID, error: str) -> None:
+    async def mark_failed(self, job_id: JobId, error: str) -> None:
         """Mark failed."""
 
-    async def mark_cancelled(self, job_id: UUID, reason: str) -> None:
+    async def mark_cancelled(self, job_id: JobId, reason: str) -> None:
         """Mark cancelled."""
 
-    async def get(self, job_id: UUID) -> CodexAuthSession | None:
+    async def get(self, job_id: JobId) -> CodexAuthSession | None:
         """Return the fake session."""
         if self.session is None or self.session.job_id != job_id:
             return None
@@ -166,9 +171,9 @@ class FakeAuthSessionRepository(CodexAuthSessionRepository):
 
 def _job(
     *,
-    job_id: UUID,
+    job_id: JobId,
     job_type: str = CODEX_AUTH_JOB_TYPE,
-    user_id: str = "user-id",
+    user_id: UserId = USER_ID,
 ) -> Job:
     now = datetime(2026, 6, 24, tzinfo=UTC)
     return Job(
@@ -180,7 +185,7 @@ def _job(
         input=CodexAuthInputV1(),
         result=None,
         status=JobStatus.RUNNING,
-        initiator=Initiator(type=ActorType.USER, external_id=user_id),
+        initiator=Initiator(type=ActorType.USER, external_id=str(user_id)),
         parent_job_id=None,
         requested_at=now,
         updated_at=now,
@@ -190,7 +195,7 @@ def _job(
     )
 
 
-def _session(job_id: UUID) -> CodexAuthSession:
+def _session(job_id: JobId) -> CodexAuthSession:
     now = datetime(2026, 6, 24, tzinfo=UTC)
     return CodexAuthSession(
         job_id=job_id,
@@ -215,25 +220,25 @@ def _use_case(
 
 
 async def test_get_codex_auth_code_returns_none_until_ready() -> None:
-    job_id = uuid4()
+    job_id = JobId.generate()
     use_case = _use_case(
         jobs=FakeJobRepository({job_id: _job(job_id=job_id)}),
         auth_sessions=FakeAuthSessionRepository(),
     )
 
-    result = await use_case.execute(job_id=job_id, current_user_id="user-id")
+    result = await use_case.execute(job_id=job_id, current_user_id=USER_ID)
 
     assert result is None
 
 
 async def test_get_codex_auth_code_returns_session_data_when_ready() -> None:
-    job_id = uuid4()
+    job_id = JobId.generate()
     use_case = _use_case(
         jobs=FakeJobRepository({job_id: _job(job_id=job_id)}),
         auth_sessions=FakeAuthSessionRepository(_session(job_id)),
     )
 
-    result = await use_case.execute(job_id=job_id, current_user_id="user-id")
+    result = await use_case.execute(job_id=job_id, current_user_id=USER_ID)
 
     assert result is not None
     assert result.verification_url == "https://example.com/device"
@@ -247,26 +252,26 @@ async def test_get_codex_auth_code_raises_when_job_is_missing() -> None:
     )
 
     with pytest.raises(CodexAuthCodeJobNotFoundError):
-        await use_case.execute(job_id=uuid4(), current_user_id="user-id")
+        await use_case.execute(job_id=JobId.generate(), current_user_id=USER_ID)
 
 
 async def test_get_codex_auth_code_raises_when_job_is_not_auth_job() -> None:
-    job_id = uuid4()
+    job_id = JobId.generate()
     use_case = _use_case(
         jobs=FakeJobRepository({job_id: _job(job_id=job_id, job_type="execute_codex_run_job_use_case")}),
         auth_sessions=FakeAuthSessionRepository(),
     )
 
     with pytest.raises(CodexAuthCodeJobTypeError):
-        await use_case.execute(job_id=job_id, current_user_id="user-id")
+        await use_case.execute(job_id=job_id, current_user_id=USER_ID)
 
 
 async def test_get_codex_auth_code_raises_when_user_does_not_own_job() -> None:
-    job_id = uuid4()
+    job_id = JobId.generate()
     use_case = _use_case(
-        jobs=FakeJobRepository({job_id: _job(job_id=job_id, user_id="other-user")}),
+        jobs=FakeJobRepository({job_id: _job(job_id=job_id, user_id=OTHER_USER_ID)}),
         auth_sessions=FakeAuthSessionRepository(),
     )
 
     with pytest.raises(CodexAuthCodeAccessDeniedError):
-        await use_case.execute(job_id=job_id, current_user_id="user-id")
+        await use_case.execute(job_id=job_id, current_user_id=USER_ID)

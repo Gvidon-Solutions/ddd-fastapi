@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TypeVar
-from uuid import UUID
 
-from app.domain.job.base.value_objects import Initiator, JobError, JobStatus
+from app.domain.job.base.value_objects import Initiator, JobError, JobId, JobStatus
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -17,7 +16,7 @@ ResultT = TypeVar("ResultT")
 class Job[InputT, ResultT]:
     """Represent one execution of a versioned job contract."""
 
-    id: UUID
+    id: JobId
     type: str
     version: str
     name: str | None
@@ -26,7 +25,7 @@ class Job[InputT, ResultT]:
     result: ResultT | None
     status: JobStatus
     initiator: Initiator
-    parent_job_id: UUID | None
+    parent_job_id: JobId | None
     requested_at: datetime
     updated_at: datetime
     started_at: datetime | None

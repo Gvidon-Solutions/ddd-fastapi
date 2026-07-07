@@ -12,7 +12,13 @@ from uuid import UUID
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.domain.job import JobContract, JobError, UnknownJobContractError, get_job_class
+from app.domain.job import (
+    JobContract,
+    JobError,
+    JobId,
+    UnknownJobContractError,
+    get_job_class,
+)
 from app.infrastructure.arq.deps import get_arq_db_engine, new_arq_job_repository
 
 ResultT = TypeVar("ResultT")
@@ -79,7 +85,7 @@ def _claim_running_before_execute[ResultT](
 ) -> ArqWorkerFunction[ResultT | None]:
     @wraps(function)
     async def wrapped(ctx: dict[str, Any], job_id: str, *args: Any, **kwargs: Any):
-        parsed_job_id = UUID(job_id)
+        parsed_job_id = JobId(UUID(job_id))
         if not await _claim_execution(ctx, parsed_job_id):
             return None
         try:
@@ -97,7 +103,7 @@ def _claim_running_before_execute[ResultT](
     return wrapped
 
 
-async def _claim_execution(ctx: dict[str, Any], job_id: UUID) -> bool:
+async def _claim_execution(ctx: dict[str, Any], job_id: JobId) -> bool:
     return await _with_job_repository(
         ctx,
         lambda jobs: jobs.try_mark_running(
@@ -109,7 +115,7 @@ async def _claim_execution(ctx: dict[str, Any], job_id: UUID) -> bool:
 
 async def _load_job(
     ctx: dict[str, Any],
-    job_id: UUID,
+    job_id: JobId,
     contract: ExecutableJobContract,
 ) -> JobContract[Any, Any]:
     engine = get_arq_db_engine(ctx)
@@ -135,7 +141,7 @@ def _contract_from_worker(function: ArqWorkerFunction) -> ExecutableJobContract:
     return contract
 
 
-async def _mark_succeeded(ctx: dict[str, Any], job_id: UUID, result: object) -> bool:
+async def _mark_succeeded(ctx: dict[str, Any], job_id: JobId, result: object) -> bool:
     return await _with_job_repository(
         ctx,
         lambda jobs: jobs.try_mark_succeeded(
@@ -146,7 +152,7 @@ async def _mark_succeeded(ctx: dict[str, Any], job_id: UUID, result: object) -> 
     )
 
 
-async def _mark_failed(ctx: dict[str, Any], job_id: UUID, exc: Exception) -> bool:
+async def _mark_failed(ctx: dict[str, Any], job_id: JobId, exc: Exception) -> bool:
     return await _with_job_repository(
         ctx,
         lambda jobs: jobs.try_mark_failed(
@@ -157,7 +163,7 @@ async def _mark_failed(ctx: dict[str, Any], job_id: UUID, exc: Exception) -> boo
     )
 
 
-async def _mark_cancelled(ctx: dict[str, Any], job_id: UUID) -> bool:
+async def _mark_cancelled(ctx: dict[str, Any], job_id: JobId) -> bool:
     return await _with_job_repository(
         ctx,
         lambda jobs: jobs.try_mark_cancelled(

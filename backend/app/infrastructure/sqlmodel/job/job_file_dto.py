@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel
 
-from app.domain.job import JobFile, JobFileRole
+from app.domain.job import JobFile, JobFileRole, JobId
 from app.infrastructure.sqlmodel.datetime import ensure_datetime_utc, get_datetime_utc
 from app.infrastructure.sqlmodel.file import FileDTO
 
@@ -41,18 +41,18 @@ class JobFileDTO(SQLModel, table=True):
             delete_attempts=file_entity.delete_attempts,
             last_delete_error=file_entity.last_delete_error,
             created_at=file_entity.created_at,
-            job_id=self.job_id,
+            job_id=JobId(self.job_id),
             role=JobFileRole(self.role),
             description=self.description,
             attached_at=ensure_datetime_utc(self.created_at),
         )
 
-    @staticmethod
-    def from_entity(job_file: JobFile) -> JobFileDTO:
+    @classmethod
+    def from_entity(cls, job_file: JobFile) -> JobFileDTO:
         """Build a DTO from a domain association."""
-        return JobFileDTO(
-            job_id=job_file.job_id,
-            file_id=job_file.file_id,
+        return cls(
+            job_id=job_file.job_id.value,
+            file_id=job_file.file_id.value,
             role=job_file.role.value,
             description=job_file.description,
             created_at=job_file.attached_at,

@@ -8,7 +8,7 @@ from sqlalchemy import or_, update
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.domain.job import JobError, JobStatus
+from app.domain.job import JobError, JobId, JobStatus
 from app.infrastructure.sqlmodel.job.job_dto import JobDTO, _error_to_record
 from app.usecase.job.ports import JobRuntime
 
@@ -67,7 +67,7 @@ class JobDispatcher:
             return False
 
         try:
-            await self.runtime.enqueue(job_type=worker_name, job_id=row.job_id)
+            await self.runtime.enqueue(job_type=worker_name, job_id=JobId(row.job_id))
         except Exception as exc:
             self._mark_retry(row, error=str(exc), now=now)
             return False

@@ -1,10 +1,8 @@
 """Pending job dispatch process tests."""
 
-from uuid import UUID
-
 import pytest
 
-from app.domain.job import ActorType, Initiator, JobError, JobStatus
+from app.domain.job import ActorType, Initiator, JobError, JobId, JobStatus
 from app.domain.job.codex_run_job_use_case import CodexRunInputV1, CodexRunJobV1
 from app.infrastructure.arq.deps import ARQ_DB_ENGINE
 from app.infrastructure.arq.job_dispatcher import dispatch_once, dispatch_pending_jobs
@@ -20,35 +18,35 @@ class FakeJobRuntime(JobRuntime):
 
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
-        self.enqueued: list[tuple[str, UUID]] = []
+        self.enqueued: list[tuple[str, JobId]] = []
 
-    async def enqueue(self, job_type: str, job_id: UUID) -> None:
+    async def enqueue(self, job_type: str, job_id: JobId) -> None:
         """Record an enqueued job."""
         if self.fail:
             raise RuntimeError("Redis unavailable")
         self.enqueued.append((job_type, job_id))
 
-    async def cancel(self, job_id: UUID) -> bool:
+    async def cancel(self, job_id: JobId) -> bool:
         """Cancellation is not used by these tests."""
         _ = job_id
         return False
 
-    async def request_cancel(self, job_id: UUID) -> None:
+    async def request_cancel(self, job_id: JobId) -> None:
         """Cancellation is not used by these tests."""
         _ = job_id
 
-    async def is_cancel_requested(self, job_id: UUID) -> bool:
+    async def is_cancel_requested(self, job_id: JobId) -> bool:
         """Cancellation is not used by these tests."""
         _ = job_id
         return False
 
-    async def clear_cancel_request(self, job_id: UUID) -> None:
+    async def clear_cancel_request(self, job_id: JobId) -> None:
         """Cancellation is not used by these tests."""
         _ = job_id
 
     async def await_terminal(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         timeout_seconds: float | None = None,
         poll_delay_seconds: float = 0.5,
@@ -94,7 +92,7 @@ async def test_dispatch_once_enqueues_pending_job(db_session) -> None:
         batch_size=10,
     )
 
-    job_row = await db_session.get(JobDTO, job.id)
+    job_row = await db_session.get(JobDTO, job.id.value)
     assert dispatched == 1
     assert runtime.enqueued == [("execute_codex_run_job_use_case", job.id)]
     assert job_row is not None
@@ -127,7 +125,7 @@ async def test_arq_cron_dispatches_pending_jobs_from_worker_context(db_session) 
         (
             "execute_codex_run_job_use_case",
             str(job.id),
-            "skills-dddpy-tasks",
+            "agentops-backend-kit-tasks",
             str(job.id),
         )
     ]
@@ -156,7 +154,7 @@ async def test_dispatch_once_ignores_non_pending_job(db_session) -> None:
         batch_size=10,
     )
 
-    job_row = await db_session.get(JobDTO, job.id)
+    job_row = await db_session.get(JobDTO, job.id.value)
     assert dispatched == 0
     assert runtime.enqueued == []
     assert job_row is not None
@@ -181,7 +179,7 @@ async def test_dispatch_once_keeps_pending_job_when_enqueue_fails(db_session) ->
         batch_size=10,
     )
 
-    job_row = await db_session.get(JobDTO, job.id)
+    job_row = await db_session.get(JobDTO, job.id.value)
     assert dispatched == 0
     assert runtime.enqueued == []
     assert job_row is not None

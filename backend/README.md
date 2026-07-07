@@ -27,7 +27,7 @@ uv run --project backend pytest
 Codex jobs run through ARQ with Redis.
 
 ```bash
-docker run -d --name skills-dddpy-redis -p 6379:6379 redis:7-alpine
+docker run -d --name agentops-backend-kit-redis -p 6379:6379 redis:7-alpine
 uv run --project backend arq app.infrastructure.arq.worker.WorkerSettings
 ```
 

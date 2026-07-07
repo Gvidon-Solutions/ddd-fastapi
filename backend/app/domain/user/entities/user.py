@@ -67,8 +67,9 @@ class User:
         if self.is_superuser:
             raise SuperuserSelfDeletionError
 
-    @staticmethod
+    @classmethod
     def create(
+        cls,
         email: EmailAddress,
         hashed_password: PasswordHash,
         full_name: FullName | None = None,
@@ -76,7 +77,7 @@ class User:
         is_superuser: bool = False,
     ) -> "User":
         """Create a new user with a generated identifier."""
-        return User(
+        return cls(
             id=UserId.generate(),
             email=email,
             hashed_password=hashed_password,

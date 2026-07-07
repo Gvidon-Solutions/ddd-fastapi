@@ -12,6 +12,7 @@ from sqlmodel import Field, SQLModel
 from app.domain.job import (
     Job,
     JobError,
+    JobId,
     JobSerializationError,
     JobStatus,
     UnknownJobContractError,
@@ -83,7 +84,7 @@ class JobDTO(SQLModel, table=True):
             raise JobSerializationError(str(exc)) from exc
 
         return contract(
-            id=self.job_id,
+            id=JobId(self.job_id),
             type=self.type,
             version=self.version,
             name=self.name,
@@ -92,7 +93,9 @@ class JobDTO(SQLModel, table=True):
             result=result_obj,
             status=JobStatus(self.status),
             initiator=initiator,
-            parent_job_id=self.parent_job_id,
+            parent_job_id=JobId(self.parent_job_id)
+            if self.parent_job_id is not None
+            else None,
             requested_at=ensure_datetime_utc(self.requested_at),
             updated_at=ensure_datetime_utc(self.updated_at),
             started_at=ensure_datetime_utc(self.started_at)
@@ -112,11 +115,11 @@ class JobDTO(SQLModel, table=True):
             else None,
         )
 
-    @staticmethod
-    def from_entity(job: Job, *, initiator_id: uuid.UUID) -> JobDTO:
+    @classmethod
+    def from_entity(cls, job: Job, *, initiator_id: uuid.UUID) -> JobDTO:
         """Build a persistence DTO from a domain entity."""
-        return JobDTO(
-            job_id=job.id,
+        return cls(
+            job_id=job.id.value,
             type=job.type,
             version=job.version,
             name=job.name,
@@ -125,7 +128,9 @@ class JobDTO(SQLModel, table=True):
             result=_to_record(job.result),
             status=job.status.value,
             initiator_id=initiator_id,
-            parent_job_id=job.parent_job_id,
+            parent_job_id=job.parent_job_id.value
+            if job.parent_job_id is not None
+            else None,
             requested_at=job.requested_at,
             updated_at=job.updated_at,
             started_at=job.started_at,

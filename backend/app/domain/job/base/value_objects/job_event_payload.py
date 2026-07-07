@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
+
+from app.domain.job.base.value_objects.job_id import JobId
 
 
 @dataclass(kw_only=True)
 class JobEventPayload:
     """Represent the job-specific payload for an emitted event."""
 
-    job_id: UUID
+    job_id: JobId

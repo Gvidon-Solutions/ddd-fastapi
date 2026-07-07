@@ -4,16 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from uuid import UUID
 
-from app.domain.file.value_objects import FileKind, FileLocation, FileStatus
+from app.domain.file.value_objects import FileId, FileKind, FileLocation, FileStatus
 
 
 @dataclass(frozen=True)
 class File:
     """Represent stored file metadata."""
 
-    file_id: UUID
+    file_id: FileId
     name: str
     kind: FileKind
     location: FileLocation

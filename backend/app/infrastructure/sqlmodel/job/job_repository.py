@@ -22,6 +22,7 @@ from app.domain.job import (
     JobFile,
     JobFileRole,
     JobHasChildrenError,
+    JobId,
     JobRepository,
     JobSerializationError,
     JobStatus,
@@ -49,17 +50,17 @@ class JobRepositoryImpl(JobRepository):
         initiator_id = await self._get_or_create_initiator(job.initiator)
         self.session.add(JobDTO.from_entity(job, initiator_id=initiator_id))
 
-    async def get(self, job_id: UUID) -> AnyJob:
+    async def get(self, job_id: JobId) -> AnyJob:
         """Return a job by ID."""
-        job = await self.session.get(JobDTO, job_id)
+        job = await self.session.get(JobDTO, job_id.value)
         if job is None:
             raise KeyError(str(job_id))
         initiator = await self._get_initiator(job.initiator_id)
         return job.to_entity(initiator)
 
-    async def get_detail(self, job_id: UUID) -> JobDetails:
+    async def get_detail(self, job_id: JobId) -> JobDetails:
         """Return job details."""
-        job = await self.session.get(JobDTO, job_id)
+        job = await self.session.get(JobDTO, job_id.value)
         if job is None:
             raise KeyError(str(job_id))
         summary = await self._summary(job)
@@ -105,14 +106,14 @@ class JobRepositoryImpl(JobRepository):
 
     async def list_files(
         self,
-        job_id: UUID,
+        job_id: JobId,
         role: JobFileRole | None = None,
     ) -> list[JobFile]:
         """Return files associated with a job."""
         statement = (
             select(JobFileDTO, FileDTO)
             .join(FileDTO, col(FileDTO.file_id) == col(JobFileDTO.file_id))
-            .where(col(JobFileDTO.job_id) == job_id)
+            .where(col(JobFileDTO.job_id) == job_id.value)
             .order_by(col(JobFileDTO.created_at).asc())
         )
         if role is not None:
@@ -120,21 +121,21 @@ class JobRepositoryImpl(JobRepository):
         rows = (await self.session.exec(statement)).all()
         return [job_file.to_entity(file) for job_file, file in rows]
 
-    async def append_event(self, job_id: UUID, event: JobEvent) -> None:
+    async def append_event(self, job_id: JobId, event: JobEvent) -> None:
         """Append a new job event."""
         self.session.add(EventDTO.from_job_event(event))
         sequence = await self._next_event_sequence(job_id)
         self.session.add(
             JobEventLinkDTO(
-                job_id=job_id,
-                event_id=event.event_id,
+                job_id=job_id.value,
+                event_id=event.event_id.value,
                 relation="emitted",
                 sequence=sequence,
                 created_at=event.created_at,
             )
         )
 
-    async def list_events(self, job_id: UUID) -> list[JobEvent]:
+    async def list_events(self, job_id: JobId) -> list[JobEvent]:
         """Return events emitted by a job."""
         statement = (
             select(EventDTO, JobEventLinkDTO)
@@ -142,17 +143,17 @@ class JobRepositoryImpl(JobRepository):
                 JobEventLinkDTO,
                 col(JobEventLinkDTO.event_id) == col(EventDTO.event_id),
             )
-            .where(col(JobEventLinkDTO.job_id) == job_id)
+            .where(col(JobEventLinkDTO.job_id) == job_id.value)
             .order_by(col(JobEventLinkDTO.sequence).asc())
         )
         result = await self.session.exec(statement)
-        return [event.to_entity(job_id=link.job_id) for event, link in result.all()]
+        return [event.to_entity(job_id=JobId(link.job_id)) for event, link in result.all()]
 
     async def save(self, job: Job) -> None:
         """Persist metadata changes to an existing job."""
         initiator_id = await self._get_or_create_initiator(job.initiator)
         job_dto = JobDTO.from_entity(job, initiator_id=initiator_id)
-        existing_job = await self.session.get(JobDTO, job.id)
+        existing_job = await self.session.get(JobDTO, job.id.value)
         if existing_job is None:
             self.session.add(job_dto)
             return
@@ -208,13 +209,15 @@ class JobRepositoryImpl(JobRepository):
         if initiator is None:
             raise KeyError(str(job.initiator_id))
         return JobSummary(
-            id=job.job_id,
+            id=JobId(job.job_id),
             type=job.type,
             version=job.version,
             name=job.name,
             status=JobStatus(job.status),
             initiator=initiator.to_value_object(),
-            parent_job_id=job.parent_job_id,
+            parent_job_id=JobId(job.parent_job_id)
+            if job.parent_job_id is not None
+            else None,
             requested_at=ensure_datetime_utc(job.requested_at),
             updated_at=ensure_datetime_utc(job.updated_at),
             started_at=ensure_datetime_utc(job.started_at)
@@ -225,20 +228,20 @@ class JobRepositoryImpl(JobRepository):
             else None,
         )
 
-    async def _next_event_sequence(self, job_id: UUID) -> int:
+    async def _next_event_sequence(self, job_id: JobId) -> int:
         statement = select(func.max(JobEventLinkDTO.sequence)).where(
-            col(JobEventLinkDTO.job_id) == job_id
+            col(JobEventLinkDTO.job_id) == job_id.value
         )
         result = await self.session.exec(statement)
         return (result.one() or 0) + 1
 
-    async def get_execution_record(self, job_id: UUID) -> JobExecutionRecord:
+    async def get_execution_record(self, job_id: JobId) -> JobExecutionRecord:
         """Return raw execution data without typed deserialization."""
-        job = await self.session.get(JobDTO, job_id)
+        job = await self.session.get(JobDTO, job_id.value)
         if job is None:
             raise KeyError(str(job_id))
         return JobExecutionRecord(
-            job_id=job.job_id,
+            job_id=JobId(job.job_id),
             type=job.type,
             version=job.version,
             input=job.input,
@@ -247,7 +250,7 @@ class JobRepositoryImpl(JobRepository):
 
     async def try_mark_running(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         started_at: datetime,
     ) -> bool:
@@ -264,7 +267,7 @@ class JobRepositoryImpl(JobRepository):
 
     async def try_mark_succeeded(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         result: object,
         finished_at: datetime,
@@ -284,7 +287,7 @@ class JobRepositoryImpl(JobRepository):
 
     async def try_mark_failed(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         error: JobError,
         finished_at: datetime,
@@ -304,7 +307,7 @@ class JobRepositoryImpl(JobRepository):
 
     async def try_mark_cancelled(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         error: JobError,
         finished_at: datetime,
@@ -313,7 +316,7 @@ class JobRepositoryImpl(JobRepository):
         statement = (
             update(JobDTO)
             .where(
-                col(JobDTO.job_id) == job_id,
+                col(JobDTO.job_id) == job_id.value,
                 col(JobDTO.status).in_(
                     [
                         JobStatus.PENDING.value,
@@ -335,22 +338,25 @@ class JobRepositoryImpl(JobRepository):
 
     async def _transition(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         expected: JobStatus,
         values: dict,
     ) -> bool:
         statement = (
             update(JobDTO)
-            .where(col(JobDTO.job_id) == job_id, col(JobDTO.status) == expected.value)
+            .where(
+                col(JobDTO.job_id) == job_id.value,
+                col(JobDTO.status) == expected.value,
+            )
             .values(**values)
         )
         result = await self.session.exec(statement)
         return (result.rowcount or 0) == 1
 
-    async def delete(self, job_id: UUID, *, cascade_children: bool = False) -> None:
+    async def delete(self, job_id: JobId, *, cascade_children: bool = False) -> None:
         """Delete a terminal job and clean up links/orphan metadata."""
-        job = await self.session.get(JobDTO, job_id)
+        job = await self.session.get(JobDTO, job_id.value)
         if job is None:
             raise KeyError(str(job_id))
         if JobStatus(job.status) not in _TERMINAL_STATUSES:
@@ -358,26 +364,26 @@ class JobRepositoryImpl(JobRepository):
 
         child_ids = (
             await self.session.exec(
-                select(JobDTO.job_id).where(col(JobDTO.parent_job_id) == job_id)
+                select(JobDTO.job_id).where(col(JobDTO.parent_job_id) == job_id.value)
             )
         ).all()
         if child_ids and not cascade_children:
             raise JobHasChildrenError(str(job_id))
         for child_id in child_ids:
-            await self.delete(child_id, cascade_children=True)
+            await self.delete(JobId(child_id), cascade_children=True)
 
         await self._delete_job_file_links(job_id)
         await self._delete_job_event_links(job_id)
-        await self.session.exec(delete(JobDTO).where(col(JobDTO.job_id) == job_id))
+        await self.session.exec(delete(JobDTO).where(col(JobDTO.job_id) == job_id.value))
 
-    async def _delete_job_file_links(self, job_id: UUID) -> None:
+    async def _delete_job_file_links(self, job_id: JobId) -> None:
         file_ids = (
             await self.session.exec(
-                select(JobFileDTO.file_id).where(col(JobFileDTO.job_id) == job_id)
+                select(JobFileDTO.file_id).where(col(JobFileDTO.job_id) == job_id.value)
             )
         ).all()
         await self.session.exec(
-            delete(JobFileDTO).where(col(JobFileDTO.job_id) == job_id)
+            delete(JobFileDTO).where(col(JobFileDTO.job_id) == job_id.value)
         )
         now = datetime.now(UTC)
         for file_id in file_ids:
@@ -392,16 +398,16 @@ class JobRepositoryImpl(JobRepository):
                     )
                 )
 
-    async def _delete_job_event_links(self, job_id: UUID) -> None:
+    async def _delete_job_event_links(self, job_id: JobId) -> None:
         event_ids = (
             await self.session.exec(
                 select(JobEventLinkDTO.event_id).where(
-                    col(JobEventLinkDTO.job_id) == job_id
+                    col(JobEventLinkDTO.job_id) == job_id.value
                 )
             )
         ).all()
         await self.session.exec(
-            delete(JobEventLinkDTO).where(col(JobEventLinkDTO.job_id) == job_id)
+            delete(JobEventLinkDTO).where(col(JobEventLinkDTO.job_id) == job_id.value)
         )
         for event_id in event_ids:
             remaining_links = await self._job_event_link_count(event_id)

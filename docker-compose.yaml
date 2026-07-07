@@ -27,7 +27,7 @@ services:
       retries: 10
 
   fastapi:
-    image: skills-dddpy-fastapi:local
+    image: agentops-backend-kit-fastapi:local
     build:
       context: .
       dockerfile: backend/fastapi.Dockerfile
@@ -59,7 +59,7 @@ services:
       retries: 20
 
   arq:
-    image: skills-dddpy-arq:local
+    image: agentops-backend-kit-arq:local
     build:
       context: .
       dockerfile: backend/arq.Dockerfile

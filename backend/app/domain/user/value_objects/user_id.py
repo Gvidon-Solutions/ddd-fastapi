@@ -10,10 +10,10 @@ class UserId:
 
     value: UUID
 
-    @staticmethod
-    def generate() -> "UserId":
+    @classmethod
+    def generate(cls) -> "UserId":
         """Generate a new identifier for a user entity."""
-        return UserId(uuid4())
+        return cls(uuid4())
 
     def __str__(self) -> str:
         """Return the string representation of the UUID."""

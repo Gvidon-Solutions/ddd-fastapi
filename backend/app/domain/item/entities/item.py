@@ -45,14 +45,15 @@ class Item:
         """Return whether the item belongs to the provided user."""
         return self.owner_id == user_id
 
-    @staticmethod
+    @classmethod
     def create(
+        cls,
         owner_id: UserId,
         title: ItemTitle,
         description: ItemDescription | None = None,
     ) -> "Item":
         """Create a new item with a generated identifier."""
-        return Item(
+        return cls(
             id=ItemId.generate(),
             owner_id=owner_id,
             title=title,

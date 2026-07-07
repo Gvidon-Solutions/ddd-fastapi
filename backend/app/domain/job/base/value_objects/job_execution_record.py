@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import UUID
 
+from app.domain.job.base.value_objects.job_id import JobId
 from app.domain.job.base.value_objects.job_status import JobStatus
 
 
@@ -12,7 +12,7 @@ from app.domain.job.base.value_objects.job_status import JobStatus
 class JobExecutionRecord:
     """Raw job data needed by the execution boundary."""
 
-    job_id: UUID
+    job_id: JobId
     type: str
     version: str
     input: dict

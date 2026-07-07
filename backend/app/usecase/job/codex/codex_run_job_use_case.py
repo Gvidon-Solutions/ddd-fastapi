@@ -7,9 +7,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
-from app.domain.file import FileKind, FileStatus
+from app.domain.file import FileId, FileKind, FileStatus
 from app.domain.job import (
     Job,
     JobFile,
@@ -90,7 +89,7 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
 
             output_job_file = await self._store_codex_output(job, exec_result)
 
-            output_file_id = str(output_job_file.file_id) if output_job_file else None
+            output_file_id = output_job_file.file_id if output_job_file else None
             output = CodexRunOutput(
                 output_file_id=output_file_id,
                 log_files=exec_result.diagnostic_file_count(),
@@ -188,7 +187,7 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             metadata=metadata,
         )
         job_file = JobFile(
-            file_id=uuid4(),
+            file_id=FileId.generate(),
             name=name,
             kind=kind,
             location=location,
@@ -210,7 +209,7 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
                 created_at=_now(),
                 payload=Event2CodexRunFileCreatedPayload(
                     job_id=job.id,
-                    file_id=str(job_file.file_id),
+                    file_id=job_file.file_id,
                     filename=name,
                 ),
             ),

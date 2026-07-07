@@ -13,10 +13,10 @@ class JobInitiatorPublic(SQLModel):
     display_name: str | None
     metadata_: dict = Field(alias="metadata")
 
-    @staticmethod
-    def from_value_object(initiator: Initiator) -> "JobInitiatorPublic":
+    @classmethod
+    def from_value_object(cls, initiator: Initiator) -> "JobInitiatorPublic":
         """Build an API response from a domain value object."""
-        return JobInitiatorPublic(
+        return cls(
             type=initiator.type.value,
             external_id=initiator.external_id,
             display_name=initiator.display_name,

@@ -14,11 +14,13 @@ from app.domain.job import (
     JobCancelNotAllowedError,
     JobCancelNotFoundError,
     JobDetails,
+    JobId,
     JobReadAccessDeniedError,
     JobReadNotFoundError,
     JobStatus,
     JobSummary,
 )
+from app.domain.user.value_objects import UserId
 from app.infrastructure.di import (
     get_cancel_job_use_case,
     get_job_details_use_case,
@@ -37,9 +39,9 @@ class FakeCancelJobUseCase(CancelJobUseCase):
 
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
-        self.calls: list[tuple[UUID, str]] = []
+        self.calls: list[tuple[JobId, UserId]] = []
 
-    async def execute(self, job_id: UUID, *, current_user_id: str) -> None:
+    async def execute(self, job_id: JobId, *, current_user_id: UserId) -> None:
         """Cancel a job."""
         self.calls.append((job_id, current_user_id))
         if self.error is not None:
@@ -51,9 +53,9 @@ class FakeListJobsUseCase(ListJobsUseCase):
 
     def __init__(self, jobs: list[JobSummary]) -> None:
         self.jobs = jobs
-        self.calls: list[str] = []
+        self.calls: list[UserId] = []
 
-    async def execute(self, *, current_user_id: str) -> list[JobSummary]:
+    async def execute(self, *, current_user_id: UserId) -> list[JobSummary]:
         """Return fixed job summaries."""
         self.calls.append(current_user_id)
         return self.jobs
@@ -69,9 +71,9 @@ class FakeGetJobDetailsUseCase(GetJobDetailsUseCase):
     ) -> None:
         self.details = details
         self.error = error
-        self.calls: list[tuple[UUID, str]] = []
+        self.calls: list[tuple[JobId, UserId]] = []
 
-    async def execute(self, job_id: UUID, *, current_user_id: str) -> JobDetails:
+    async def execute(self, job_id: JobId, *, current_user_id: UserId) -> JobDetails:
         """Return fixed job details."""
         self.calls.append((job_id, current_user_id))
         if self.error is not None:
@@ -83,7 +85,7 @@ class FakeGetJobDetailsUseCase(GetJobDetailsUseCase):
 def _job_summary(user, *, job_id: UUID | None = None) -> JobSummary:
     now = datetime.now(UTC)
     return JobSummary(
-        id=job_id or uuid4(),
+        id=JobId(job_id or uuid4()),
         type="execute_codex_auth_job_use_case",
         version="v1",
         name="Codex auth",
@@ -129,9 +131,9 @@ async def test_list_jobs_returns_current_user_jobs(user) -> None:
 
     # Assert
     assert result.count == 1
-    assert result.data[0].id == summary.id
+    assert result.data[0].id == summary.id.value
     assert result.data[0].status == "pending"
-    assert use_case.calls == [str(user.id)]
+    assert use_case.calls == [user.id]
 
 
 async def test_get_job_details_returns_current_user_job(user) -> None:
@@ -151,7 +153,7 @@ async def test_get_job_details_returns_current_user_job(user) -> None:
     assert result.id == job_id
     assert result.input == {"kind": "test"}
     assert result.events == []
-    assert use_case.calls == [(job_id, str(user.id))]
+    assert use_case.calls == [(JobId(job_id), user.id)]
 
 
 async def test_get_job_details_returns_404_when_job_is_missing(user) -> None:
@@ -202,7 +204,7 @@ async def test_list_jobs_api_route_returns_current_user_jobs(user) -> None:
     # Assert
     assert response.status_code == 200
     assert response.json()["count"] == 1
-    assert response.json()["data"][0]["id"] == str(summary.id)
+    assert response.json()["data"][0]["id"] == str(summary.id.value)
 
 
 async def test_get_job_details_api_route_returns_current_user_job(user) -> None:
@@ -239,7 +241,7 @@ async def test_cancel_job_returns_success(user) -> None:
 
     assert result.job_id == job_id
     assert result.cancelled is True
-    assert use_case.calls == [(job_id, str(user.id))]
+    assert use_case.calls == [(JobId(job_id), user.id)]
 
 
 async def test_cancel_job_returns_404_when_job_is_missing(user) -> None:
@@ -282,7 +284,7 @@ async def test_cancel_job_returns_409_when_queue_does_not_cancel(user) -> None:
         )
 
     assert exc_info.value.status_code == 409
-    assert use_case.calls == [(job_id, str(user.id))]
+    assert use_case.calls == [(JobId(job_id), user.id)]
 
 
 async def test_cancel_job_api_route_returns_success(user) -> None:

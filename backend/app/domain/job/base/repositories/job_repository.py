@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from uuid import UUID
 
 from app.domain.job.base.entities import AnyJob, Job, JobEvent, JobFile
-from app.domain.job.base.value_objects import JobError, JobFileRole
+from app.domain.job.base.value_objects import JobError, JobFileRole, JobId
 from app.domain.job.base.value_objects.job_details import JobDetails
 from app.domain.job.base.value_objects.job_execution_record import JobExecutionRecord
 from app.domain.job.base.value_objects.job_summary import JobSummary
@@ -21,11 +20,11 @@ class JobRepository(ABC):
         """Create a new job."""
 
     @abstractmethod
-    async def get(self, job_id: UUID) -> AnyJob:
+    async def get(self, job_id: JobId) -> AnyJob:
         """Return a job by ID."""
 
     @abstractmethod
-    async def get_detail(self, job_id: UUID) -> JobDetails:
+    async def get_detail(self, job_id: JobId) -> JobDetails:
         """Return a job details value object."""
 
     @abstractmethod
@@ -39,30 +38,30 @@ class JobRepository(ABC):
     @abstractmethod
     async def list_files(
         self,
-        job_id: UUID,
+        job_id: JobId,
         role: JobFileRole | None = None,
     ) -> list[JobFile]:
         """Return files associated with a job."""
 
     @abstractmethod
-    async def append_event(self, job_id: UUID, event: JobEvent) -> None:
+    async def append_event(self, job_id: JobId, event: JobEvent) -> None:
         """Append a new job event."""
 
     @abstractmethod
-    async def list_events(self, job_id: UUID) -> list[JobEvent]:
+    async def list_events(self, job_id: JobId) -> list[JobEvent]:
         """Return events emitted by a job."""
 
     @abstractmethod
     async def save(self, job: Job) -> None:
         """Persist changes to an existing job."""
 
-    async def get_execution_record(self, job_id: UUID) -> JobExecutionRecord:
+    async def get_execution_record(self, job_id: JobId) -> JobExecutionRecord:
         """Return raw execution data without typed deserialization."""
         raise NotImplementedError
 
     async def try_mark_running(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         started_at: datetime,
     ) -> bool:
@@ -71,7 +70,7 @@ class JobRepository(ABC):
 
     async def try_mark_succeeded(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         result: object,
         finished_at: datetime,
@@ -81,7 +80,7 @@ class JobRepository(ABC):
 
     async def try_mark_failed(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         error: JobError,
         finished_at: datetime,
@@ -91,7 +90,7 @@ class JobRepository(ABC):
 
     async def try_mark_cancelled(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         error: JobError,
         finished_at: datetime,
@@ -99,6 +98,6 @@ class JobRepository(ABC):
         """Atomically mark a running or queued job as cancelled."""
         raise NotImplementedError
 
-    async def delete(self, job_id: UUID, *, cascade_children: bool = False) -> None:
+    async def delete(self, job_id: JobId, *, cascade_children: bool = False) -> None:
         """Delete a terminal job and clean up links/read-side metadata."""
         raise NotImplementedError

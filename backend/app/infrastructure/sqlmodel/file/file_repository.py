@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.domain.file import File, FileRepository
+from app.domain.file import File, FileId, FileRepository
 from app.infrastructure.sqlmodel.file.file_dto import FileDTO
 
 
@@ -20,9 +18,9 @@ class FileRepositoryImpl(FileRepository):
         """Create file metadata."""
         self.session.add(FileDTO.from_entity(file))
 
-    async def get(self, file_id: UUID) -> File:
+    async def get(self, file_id: FileId) -> File:
         """Return file metadata."""
-        file = await self.session.get(FileDTO, file_id)
+        file = await self.session.get(FileDTO, file_id.value)
         if file is None:
             raise KeyError(str(file_id))
         return file.to_entity()

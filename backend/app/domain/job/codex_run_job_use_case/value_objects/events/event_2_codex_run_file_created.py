@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Literal
-from uuid import UUID, uuid4
 
+from app.domain.event import EventId
+from app.domain.file import FileId
 from app.domain.job.base.entities import JobEvent
 from app.domain.job.base.value_objects import JobEventPayload
 
@@ -14,7 +15,7 @@ from app.domain.job.base.value_objects import JobEventPayload
 class Event2CodexRunFileCreatedPayload(JobEventPayload):
     """Represent Codex run file created payload."""
 
-    file_id: str
+    file_id: FileId
     filename: str
 
     def __getitem__(self, key: str):
@@ -26,7 +27,7 @@ class Event2CodexRunFileCreatedPayload(JobEventPayload):
 class Event2CodexRunFileCreated(JobEvent):
     """Represent the Codex run file created event."""
 
-    event_id: UUID = field(default_factory=uuid4, init=False)
+    event_id: EventId = field(default_factory=EventId.generate, init=False)
     type: Literal["CodexRunFileCreatedV1"] = field(
         default="CodexRunFileCreatedV1",
         init=False,

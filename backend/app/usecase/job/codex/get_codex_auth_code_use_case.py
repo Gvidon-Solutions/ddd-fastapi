@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from uuid import UUID
 
-from app.domain.job import JobRepository
+from app.domain.job import JobId, JobRepository
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthCodeAccessDeniedError,
     CodexAuthCodeJobNotFoundError,
@@ -15,6 +14,7 @@ from app.domain.job.codex_auth_job_use_case import (
     CodexAuthSessionStatus,
     CodexDeviceAuth,
 )
+from app.domain.user.value_objects import UserId
 
 CODEX_AUTH_JOB_TYPE = CodexAuthJobV1.type
 
@@ -25,8 +25,8 @@ class GetCodexAuthCodeUseCase(ABC):
     @abstractmethod
     async def execute(
         self,
-        job_id: UUID,
-        current_user_id: str,
+        job_id: JobId,
+        current_user_id: UserId,
     ) -> CodexDeviceAuth | None:
         """Return device auth data once it is available."""
 
@@ -45,8 +45,8 @@ class GetCodexAuthCodeUseCaseImpl(GetCodexAuthCodeUseCase):
 
     async def execute(
         self,
-        job_id: UUID,
-        current_user_id: str,
+        job_id: JobId,
+        current_user_id: UserId,
     ) -> CodexDeviceAuth | None:
         """Return device auth data once it is available."""
         try:
@@ -56,7 +56,7 @@ class GetCodexAuthCodeUseCaseImpl(GetCodexAuthCodeUseCase):
 
         if job.type != CODEX_AUTH_JOB_TYPE:
             raise CodexAuthCodeJobTypeError(str(job_id))
-        if job.initiator.external_id != current_user_id:
+        if job.initiator.external_id != str(current_user_id):
             raise CodexAuthCodeAccessDeniedError(str(job_id))
 
         session = await self.auth_sessions.get(job_id)

@@ -13,10 +13,10 @@ class JobErrorPublic(SQLModel):
     details: dict
     retryable: bool
 
-    @staticmethod
-    def from_value_object(error: JobError) -> "JobErrorPublic":
+    @classmethod
+    def from_value_object(cls, error: JobError) -> "JobErrorPublic":
         """Build an API response from a domain value object."""
-        return JobErrorPublic(
+        return cls(
             code=error.code,
             message=error.message,
             details=error.details,

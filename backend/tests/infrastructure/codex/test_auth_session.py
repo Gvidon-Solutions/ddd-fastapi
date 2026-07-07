@@ -7,6 +7,7 @@ from uuid import UUID
 import pytest
 from arq.connections import ArqRedis
 
+from app.domain.job import JobId
 from app.domain.job.codex_auth_job_use_case import CodexAuthSessionStatus
 from app.infrastructure.codex import RedisCodexAuthSessionRepository
 
@@ -37,7 +38,7 @@ async def test_redis_codex_auth_session_repository_uses_required_redis() -> None
         pending_ttl_seconds=600,
         terminal_ttl_seconds=60,
     )
-    job_id = UUID("11111111-1111-1111-1111-111111111111")
+    job_id = JobId(UUID("11111111-1111-1111-1111-111111111111"))
     expires_at = datetime.now(UTC) + timedelta(minutes=5)
 
     await repository.save_pending(

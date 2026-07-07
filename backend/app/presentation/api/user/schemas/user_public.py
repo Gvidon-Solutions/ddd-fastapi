@@ -19,10 +19,10 @@ class UserPublic(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
     created_at: datetime | None = None
 
-    @staticmethod
-    def from_entity(user: User) -> "UserPublic":
+    @classmethod
+    def from_entity(cls, user: User) -> "UserPublic":
         """Build an API response from a domain entity."""
-        return UserPublic(
+        return cls(
             id=user.id.value,
             email=user.email.value,
             full_name=user.full_name.value if user.full_name else None,

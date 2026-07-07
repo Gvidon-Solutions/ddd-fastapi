@@ -8,6 +8,7 @@ from app.domain.job import (
     JobCancelAccessDeniedError,
     JobCancelNotAllowedError,
     JobCancelNotFoundError,
+    JobId,
     JobReadAccessDeniedError,
     JobReadNotFoundError,
 )
@@ -34,7 +35,7 @@ async def list_jobs(
     use_case: ListJobsUseCase = Depends(get_list_jobs_use_case),
 ) -> JobsPublic:
     """Return jobs created by the current user."""
-    jobs = await use_case.execute(current_user_id=str(current_user.id))
+    jobs = await use_case.execute(current_user_id=current_user.id)
     return JobsPublic(
         data=[JobSummaryPublic.from_value_object(job) for job in jobs],
         count=len(jobs),
@@ -49,7 +50,7 @@ async def get_job_details(
 ) -> JobDetailsPublic:
     """Return one job created by the current user."""
     try:
-        details = await use_case.execute(job_id, current_user_id=str(current_user.id))
+        details = await use_case.execute(JobId(job_id), current_user_id=current_user.id)
     except JobReadNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
     except JobReadAccessDeniedError:
@@ -65,7 +66,7 @@ async def cancel_job(
 ) -> JobCancelPublic:
     """Cancel a queued or running job."""
     try:
-        await use_case.execute(job_id, current_user_id=str(current_user.id))
+        await use_case.execute(JobId(job_id), current_user_id=current_user.id)
     except JobCancelNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
     except JobCancelAccessDeniedError:

@@ -20,11 +20,11 @@ class JobEventPublic(SQLModel):
     created_at: datetime
     payload: dict[str, Any]
 
-    @staticmethod
-    def from_entity(event: JobEvent) -> "JobEventPublic":
+    @classmethod
+    def from_entity(cls, event: JobEvent) -> "JobEventPublic":
         """Build an API response from a domain entity."""
-        return JobEventPublic(
-            event_id=event.event_id,
+        return cls(
+            event_id=event.event_id.value,
             type=event.type,
             source=event.source,
             version=event.version,

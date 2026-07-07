@@ -11,6 +11,7 @@ from uuid import UUID
 from arq.connections import ArqRedis, create_pool
 
 from app.config import settings
+from app.domain.job import JobId
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthSession,
     CodexAuthSessionRepository,
@@ -37,7 +38,7 @@ class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
     async def save_pending(
         self,
         *,
-        job_id: UUID,
+        job_id: JobId,
         verification_url: str | None,
         user_code: str | None,
         expires_at: datetime,
@@ -57,7 +58,7 @@ class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
         ttl = max(1, int((expires_at - now).total_seconds()))
         await self._set(job_id, session, ttl=min(ttl, self.pending_ttl_seconds))
 
-    async def mark_authenticated(self, job_id: UUID) -> None:
+    async def mark_authenticated(self, job_id: JobId) -> None:
         """Mark the session authenticated and clear sensitive fields."""
         await self._mark_terminal(
             job_id,
@@ -65,7 +66,7 @@ class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
             error=None,
         )
 
-    async def mark_failed(self, job_id: UUID, error: str) -> None:
+    async def mark_failed(self, job_id: JobId, error: str) -> None:
         """Mark the session failed and clear sensitive fields."""
         await self._mark_terminal(
             job_id,
@@ -73,7 +74,7 @@ class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
             error=error,
         )
 
-    async def mark_cancelled(self, job_id: UUID, reason: str) -> None:
+    async def mark_cancelled(self, job_id: JobId, reason: str) -> None:
         """Mark the session cancelled and clear sensitive fields."""
         await self._mark_terminal(
             job_id,
@@ -81,13 +82,13 @@ class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
             error=reason,
         )
 
-    async def get(self, job_id: UUID) -> CodexAuthSession | None:
+    async def get(self, job_id: JobId) -> CodexAuthSession | None:
         """Return a transient session when one exists."""
         return await self._get(self.redis, job_id)
 
     async def _mark_terminal(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         status: CodexAuthSessionStatus,
         error: str | None,
@@ -108,7 +109,7 @@ class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
 
     async def _set(
         self,
-        job_id: UUID,
+        job_id: JobId,
         session: CodexAuthSession,
         *,
         ttl: int,
@@ -116,7 +117,7 @@ class RedisCodexAuthSessionRepository(CodexAuthSessionRepository):
         payload = json.dumps(_session_to_record(session))
         await self.redis.set(_key(job_id), payload, ex=ttl)
 
-    async def _get(self, redis: ArqRedis, job_id: UUID) -> CodexAuthSession | None:
+    async def _get(self, redis: ArqRedis, job_id: JobId) -> CodexAuthSession | None:
         payload = await redis.get(_key(job_id))
         if payload is None:
             return None
@@ -141,7 +142,7 @@ class RedisPoolCodexAuthSessionRepository(CodexAuthSessionRepository):
     async def save_pending(
         self,
         *,
-        job_id: UUID,
+        job_id: JobId,
         verification_url: str | None,
         user_code: str | None,
         expires_at: datetime,
@@ -155,22 +156,22 @@ class RedisPoolCodexAuthSessionRepository(CodexAuthSessionRepository):
                 expires_at=expires_at,
             )
 
-    async def mark_authenticated(self, job_id: UUID) -> None:
+    async def mark_authenticated(self, job_id: JobId) -> None:
         """Mark the session authenticated and clear sensitive fields."""
         async with self._redis_pool() as redis:
             await self._repository(redis).mark_authenticated(job_id)
 
-    async def mark_failed(self, job_id: UUID, error: str) -> None:
+    async def mark_failed(self, job_id: JobId, error: str) -> None:
         """Mark the session failed and clear sensitive fields."""
         async with self._redis_pool() as redis:
             await self._repository(redis).mark_failed(job_id, error)
 
-    async def mark_cancelled(self, job_id: UUID, reason: str) -> None:
+    async def mark_cancelled(self, job_id: JobId, reason: str) -> None:
         """Mark the session cancelled and clear sensitive fields."""
         async with self._redis_pool() as redis:
             await self._repository(redis).mark_cancelled(job_id, reason)
 
-    async def get(self, job_id: UUID) -> CodexAuthSession | None:
+    async def get(self, job_id: JobId) -> CodexAuthSession | None:
         """Return a transient session when one exists."""
         async with self._redis_pool() as redis:
             return await self._repository(redis).get(job_id)
@@ -192,7 +193,7 @@ class RedisPoolCodexAuthSessionRepository(CodexAuthSessionRepository):
             await redis.aclose()
 
 
-def _key(job_id: UUID) -> str:
+def _key(job_id: JobId) -> str:
     return f"codex_auth_session:{job_id}"
 
 
@@ -215,7 +216,7 @@ def _session_to_record(session: CodexAuthSession) -> dict[str, str | None]:
 
 def _session_from_record(record: dict) -> CodexAuthSession:
     return CodexAuthSession(
-        job_id=UUID(record["job_id"]),
+        job_id=JobId(UUID(record["job_id"])),
         verification_url=record.get("verification_url"),
         user_code=record.get("user_code"),
         expires_at=datetime.fromisoformat(record["expires_at"]),

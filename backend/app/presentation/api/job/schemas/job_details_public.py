@@ -20,11 +20,11 @@ class JobDetailsPublic(JobSummaryPublic):
     files: list[JobFilePublic]
     events: list[JobEventPublic]
 
-    @staticmethod
-    def from_details(details: JobDetails) -> "JobDetailsPublic":
+    @classmethod
+    def from_details(cls, details: JobDetails) -> "JobDetailsPublic":
         """Build an API response from a domain value object."""
         summary = JobSummaryPublic.from_value_object(details)
-        return JobDetailsPublic(
+        return cls(
             id=summary.id,
             type=summary.type,
             version=summary.version,

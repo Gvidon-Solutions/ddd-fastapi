@@ -6,6 +6,7 @@ from uuid import UUID
 import pytest
 from arq.connections import ArqRedis
 
+from app.domain.job import JobId
 from app.infrastructure.arq import ArqJobRuntime
 
 pytestmark = pytest.mark.anyio
@@ -40,7 +41,8 @@ async def test_arq_job_runtime_uses_required_redis_for_cancel_markers() -> None:
         cast(ArqRedis, redis),
         cancel_ttl_seconds=60,
     )
-    job_id = UUID("11111111-1111-1111-1111-111111111111")
+    job_uuid = UUID("11111111-1111-1111-1111-111111111111")
+    job_id = JobId(job_uuid)
     key = f"job_cancel_requested:{job_id}"
 
     await runtime.request_cancel(job_id)

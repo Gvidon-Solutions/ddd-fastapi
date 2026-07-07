@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Literal
-from uuid import UUID, uuid4
 
+from app.domain.event import EventId
 from app.domain.job.base.entities import JobEvent
 from app.domain.job.base.value_objects import JobEventPayload
 
@@ -26,7 +26,7 @@ class Event2UserLoginRequestedPayload(JobEventPayload):
 class Event2UserLoginRequested(JobEvent):
     """Represent the event emitted after Codex device user login was requested."""
 
-    event_id: UUID = field(default_factory=uuid4, init=False)
+    event_id: EventId = field(default_factory=EventId.generate, init=False)
     type: Literal["CodexAuthUserLoginRequestedV1"] = field(
         default="CodexAuthUserLoginRequestedV1",
         init=False,

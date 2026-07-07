@@ -2,4 +2,6 @@
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from .event_id import EventId
+
+__all__ = ("EventId",)

@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.domain.job import Initiator
+from app.domain.job import Initiator, JobId
 from app.domain.job.codex_auth_job_use_case import CodexAuthInputV1, CodexAuthJobV1
 from app.domain.job.codex_run_job_use_case import CodexRunInputV1, CodexRunJobV1
 from app.infrastructure.di import (
@@ -41,7 +41,7 @@ async def launch_codex_auth(
         description="Authenticate Codex through device login",
     )
     await create_job.execute(job)
-    return JobLaunchPublic(job_id=job.id)
+    return JobLaunchPublic(job_id=job.id.value)
 
 
 @router.get(
@@ -57,8 +57,8 @@ async def get_codex_auth_code_and_url(
     """Return Codex device auth URL and code once the auth job has produced them."""
     try:
         auth_code = await use_case.execute(
-            job_id=job_id,
-            current_user_id=str(current_user.id),
+            job_id=JobId(job_id),
+            current_user_id=current_user.id,
         )
     except CodexAuthCodeJobNotFoundError:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -92,4 +92,4 @@ async def launch_codex_run(
         description="Run Codex against a workspace",
     )
     await create_job.execute(job)
-    return JobLaunchPublic(job_id=job.id)
+    return JobLaunchPublic(job_id=job.id.value)

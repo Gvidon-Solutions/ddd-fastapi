@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from uuid import UUID
 
 from app.domain.job import (
     JobDetails,
+    JobId,
     JobReadAccessDeniedError,
     JobReadNotFoundError,
     JobRepository,
 )
+from app.domain.user.value_objects import UserId
 
 
 class GetJobDetailsUseCase(ABC):
     """Define the application boundary for reading one job."""
 
     @abstractmethod
-    async def execute(self, job_id: UUID, *, current_user_id: str) -> JobDetails:
+    async def execute(self, job_id: JobId, *, current_user_id: UserId) -> JobDetails:
         """Return job details visible to the current user."""
 
 
@@ -28,14 +29,14 @@ class GetJobDetailsUseCaseImpl(GetJobDetailsUseCase):
         """Store use case dependencies."""
         self.jobs = jobs
 
-    async def execute(self, job_id: UUID, *, current_user_id: str) -> JobDetails:
+    async def execute(self, job_id: JobId, *, current_user_id: UserId) -> JobDetails:
         """Return job details visible to the current user."""
         try:
             details = await self.jobs.get_detail(job_id)
         except KeyError as error:
             raise JobReadNotFoundError(str(job_id)) from error
 
-        if details.initiator.external_id != current_user_id:
+        if details.initiator.external_id != str(current_user_id):
             raise JobReadAccessDeniedError(str(job_id))
         return details
 

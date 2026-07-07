@@ -18,11 +18,13 @@ from app.domain.job import (
     JobEvent,
     JobFile,
     JobFileRole,
+    JobId,
     JobRepository,
     JobStatus,
     JobSummary,
 )
 from app.domain.job.codex_run_job_use_case import CodexRunInputV1, CodexRunJobV1
+from app.domain.user.value_objects import UserId
 from app.usecase.job import (
     JobRuntime,
     new_cancel_job_use_case,
@@ -31,24 +33,27 @@ from app.usecase.job import (
 
 pytestmark = pytest.mark.anyio
 
+OWNER_ID = UserId(UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+OTHER_USER_ID = UserId(UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+
 
 class FakeJobRepository(JobRepository):
     """Store jobs in memory."""
 
     def __init__(self) -> None:
         self.created: list[Job] = []
-        self.jobs: dict[UUID, Job] = {}
+        self.jobs: dict[JobId, Job] = {}
 
     async def create(self, job: Job) -> None:
         """Create a job."""
         self.created.append(job)
         self.jobs[job.id] = job
 
-    async def get(self, job_id: UUID) -> Job:
+    async def get(self, job_id: JobId) -> Job:
         """Return a job."""
         return self.jobs[job_id]
 
-    async def get_detail(self, job_id: UUID) -> JobDetails:
+    async def get_detail(self, job_id: JobId) -> JobDetails:
         """Return job detail."""
         _ = job_id
         raise NotImplementedError
@@ -79,18 +84,18 @@ class FakeJobRepository(JobRepository):
 
     async def list_files(
         self,
-        job_id: UUID,
+        job_id: JobId,
         role: JobFileRole | None = None,
     ) -> list[JobFile]:
         """Return no files."""
         _ = (job_id, role)
         return []
 
-    async def append_event(self, job_id: UUID, event: JobEvent) -> None:
+    async def append_event(self, job_id: JobId, event: JobEvent) -> None:
         """Append is unused by these tests."""
         _ = (job_id, event)
 
-    async def list_events(self, job_id: UUID) -> list[JobEvent]:
+    async def list_events(self, job_id: JobId) -> list[JobEvent]:
         """Return no events."""
         _ = job_id
         return []
@@ -101,7 +106,7 @@ class FakeJobRepository(JobRepository):
 
     async def try_mark_cancelled(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         error: JobError,
         finished_at: datetime,
@@ -121,40 +126,40 @@ class FakeJobRuntime(JobRuntime):
     """Record runtime operations."""
 
     def __init__(self) -> None:
-        self.enqueued: list[tuple[str, UUID]] = []
-        self.cancelled: list[UUID] = []
-        self.requested: list[UUID] = []
+        self.enqueued: list[tuple[str, JobId]] = []
+        self.cancelled: list[JobId] = []
+        self.requested: list[JobId] = []
         self.cancel_result = True
 
     async def enqueue(
         self,
         job_type: str,
-        job_id: UUID,
+        job_id: JobId,
     ) -> None:
         """Record an enqueued job."""
         self.enqueued.append((job_type, job_id))
 
-    async def cancel(self, job_id: UUID) -> bool:
+    async def cancel(self, job_id: JobId) -> bool:
         """Record a cancelled job."""
         self.cancelled.append(job_id)
         return self.cancel_result
 
-    async def request_cancel(self, job_id: UUID) -> None:
+    async def request_cancel(self, job_id: JobId) -> None:
         """Record a cancellation request."""
         self.requested.append(job_id)
 
-    async def is_cancel_requested(self, job_id: UUID) -> bool:
+    async def is_cancel_requested(self, job_id: JobId) -> bool:
         """Return whether cancellation was requested."""
         return job_id in self.requested
 
-    async def clear_cancel_request(self, job_id: UUID) -> None:
+    async def clear_cancel_request(self, job_id: JobId) -> None:
         """Clear a cancellation request."""
         if job_id in self.requested:
             self.requested.remove(job_id)
 
     async def await_terminal(
         self,
-        job_id: UUID,
+        job_id: JobId,
         *,
         timeout_seconds: float | None = None,
         poll_delay_seconds: float = 0.5,
@@ -164,11 +169,11 @@ class FakeJobRuntime(JobRuntime):
         return None
 
 
-def _codex_run_job(parent_job_id: UUID | None = None) -> Job:
+def _codex_run_job(parent_job_id: JobId | None = None) -> Job:
     return CodexRunJobV1.new(
         initiator=Initiator(
             type=ActorType.USER,
-            external_id="anton",
+            external_id=str(OWNER_ID),
             display_name="Anton",
         ),
         input=CodexRunInputV1(prompt="Review repository"),
@@ -193,7 +198,7 @@ async def test_create_job_use_case_persists_typed_pending_job() -> None:
     assert created.name == "Run Codex"
     assert created.description == "Run Codex against repository"
     assert created.input == CodexRunInputV1(prompt="Review repository")
-    assert created.initiator.external_id == "anton"
+    assert created.initiator.external_id == str(OWNER_ID)
     assert created.parent_job_id is None
     assert created.requested_at >= started_at
     assert created.updated_at == created.requested_at
@@ -201,7 +206,7 @@ async def test_create_job_use_case_persists_typed_pending_job() -> None:
 
 
 async def test_create_job_use_case_keeps_parent_job_id_for_child_jobs() -> None:
-    parent_job_id = UUID("11111111-1111-1111-1111-111111111111")
+    parent_job_id = JobId(UUID("11111111-1111-1111-1111-111111111111"))
     jobs = FakeJobRepository()
     create_job = new_create_job_use_case(jobs=jobs)
 
@@ -230,7 +235,7 @@ async def test_cancel_job_cancels_queue_and_marks_job_cancelled() -> None:
     await jobs.create(job)
     cancel_use_case = new_cancel_job_use_case(jobs=jobs, runtime=runtime)
 
-    await cancel_use_case.execute(job.id, current_user_id="anton")
+    await cancel_use_case.execute(job.id, current_user_id=OWNER_ID)
 
     assert runtime.cancelled == [job.id]
     assert job.status == JobStatus.CANCELLED
@@ -250,7 +255,7 @@ async def test_cancel_running_job_requests_worker_cancellation_only() -> None:
         runtime=runtime,
     )
 
-    await cancel_use_case.execute(job.id, current_user_id="anton")
+    await cancel_use_case.execute(job.id, current_user_id=OWNER_ID)
 
     assert runtime.requested == [job.id]
     assert runtime.cancelled == [job.id]
@@ -269,7 +274,7 @@ async def test_cancel_job_returns_false_when_queue_does_not_cancel() -> None:
     await jobs.create(job)
 
     with pytest.raises(JobCancelNotAllowedError):
-        await cancel_use_case.execute(job.id, current_user_id="anton")
+        await cancel_use_case.execute(job.id, current_user_id=OWNER_ID)
 
     assert runtime.cancelled == [job.id]
 
@@ -281,8 +286,8 @@ async def test_cancel_job_raises_when_job_is_missing() -> None:
 
     with pytest.raises(JobCancelNotFoundError):
         await cancel_use_case.execute(
-            UUID("11111111-1111-1111-1111-111111111111"),
-            current_user_id="anton",
+            JobId(UUID("11111111-1111-1111-1111-111111111111")),
+            current_user_id=OWNER_ID,
         )
 
     assert runtime.cancelled == []
@@ -296,6 +301,6 @@ async def test_cancel_job_raises_when_job_is_not_owned() -> None:
     cancel_use_case = new_cancel_job_use_case(jobs=jobs, runtime=runtime)
 
     with pytest.raises(JobCancelAccessDeniedError):
-        await cancel_use_case.execute(job.id, current_user_id="other-user")
+        await cancel_use_case.execute(job.id, current_user_id=OTHER_USER_ID)
 
     assert runtime.cancelled == []

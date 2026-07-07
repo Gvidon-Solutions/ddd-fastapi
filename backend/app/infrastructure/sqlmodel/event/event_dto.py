@@ -12,8 +12,8 @@ from pydantic import TypeAdapter
 from sqlalchemy import JSON, Column, DateTime, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
-from app.domain.event import get_event_class
-from app.domain.job import JobEvent, JobEventPayload
+from app.domain.event import EventId, get_event_class
+from app.domain.job import JobEvent, JobEventPayload, JobId
 from app.infrastructure.sqlmodel.datetime import ensure_datetime_utc, get_datetime_utc
 
 
@@ -39,7 +39,7 @@ class EventDTO(SQLModel, table=True):
         self,
         event_class: Any | None = None,
         *,
-        job_id: UUID | None = None,
+        job_id: JobId | None = None,
     ) -> JobEvent:
         """Convert this persistence DTO to a domain event entity."""
         event_class = event_class or get_event_class(self.type)
@@ -56,16 +56,16 @@ class EventDTO(SQLModel, table=True):
             )
         except Exception:
             return self.to_job_event(job_id=job_id)
-        event.event_id = self.event_id
+        event.event_id = EventId(self.event_id)
         event.type = self.type
         event.source = self.source
         event.version = self.version
         return cast(JobEvent, event)
 
-    def to_job_event(self, *, job_id: UUID | None = None) -> JobEvent:
+    def to_job_event(self, *, job_id: JobId | None = None) -> JobEvent:
         """Convert this persistence DTO to a base job event domain entity."""
         return JobEvent(
-            event_id=self.event_id,
+            event_id=EventId(self.event_id),
             type=self.type,
             source=self.source,
             version=self.version,
@@ -77,7 +77,7 @@ class EventDTO(SQLModel, table=True):
         self,
         event_class: Any,
         *,
-        job_id: UUID | None,
+        job_id: JobId | None,
     ) -> JobEventPayload:
         from app.infrastructure.sqlmodel.job.payload_codec import load_payload
 
@@ -86,11 +86,11 @@ class EventDTO(SQLModel, table=True):
             raise TypeError("Event payload type must be a dataclass")
         return load_payload(_payload_with_job_id(self.payload, job_id), payload_type)
 
-    @staticmethod
-    def from_job_event(event: JobEvent) -> EventDTO:
+    @classmethod
+    def from_job_event(cls, event: JobEvent) -> EventDTO:
         """Build a persistence DTO from a job event domain entity."""
-        return EventDTO(
-            event_id=event.event_id,
+        return cls(
+            event_id=event.event_id.value,
             type=event.type,
             source=event.source,
             version=event.version,
@@ -113,21 +113,28 @@ def _payload_to_record(payload: JobEventPayload | dict) -> dict:
     return _data_to_record(payload)
 
 
-def _payload_with_job_id(payload: dict, job_id: UUID | None) -> dict:
+def _payload_with_job_id(payload: dict, job_id: JobId | None) -> dict:
     payload_with_job_id = dict(payload)
     if "job_id" not in payload_with_job_id and job_id is not None:
-        payload_with_job_id["job_id"] = job_id
+        payload_with_job_id["job_id"] = {"value": str(job_id.value)}
     return payload_with_job_id
 
 
 def _base_payload_or_record(
     payload: dict,
-    job_id: UUID | None,
+    job_id: JobId | None,
 ) -> JobEventPayload | dict:
     payload_with_job_id = _payload_with_job_id(payload, job_id)
     if set(payload_with_job_id) == {"job_id"}:
-        return JobEventPayload(job_id=UUID(str(payload_with_job_id["job_id"])))
+        return JobEventPayload(job_id=JobId(_job_id_value(payload_with_job_id["job_id"])))
     return payload_with_job_id
+
+
+def _job_id_value(value: object) -> UUID:
+    if isinstance(value, dict):
+        record = cast(dict[str, object], value)
+        return UUID(str(record["value"]))
+    return UUID(str(value))
 
 
 class JobEventLinkDTO(SQLModel, table=True):
