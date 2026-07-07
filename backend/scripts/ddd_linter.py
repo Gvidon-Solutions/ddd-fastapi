@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import argparse
 import ast
+import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
-ROOT = Path(__file__).resolve().parents[1]
-APP_ROOT = ROOT / "backend" / "app"
-TEST_ROOT = ROOT / "backend" / "tests"
+BACKEND = Path(__file__).resolve().parents[1]
+ROOT = BACKEND.parent
+APP_ROOT = BACKEND / "app"
+TEST_ROOT = BACKEND / "tests"
 
 FORBIDDEN_DOMAIN_IMPORT_PREFIXES = (
     "app.usecase",
@@ -114,11 +116,11 @@ def main() -> int:
 
     if violations:
         for violation in sorted(violations, key=lambda item: (item.path, item.code)):
-            print(violation.format())
-        print(f"\n{len(violations)} DDD violation(s) found.")
+            sys.stdout.write(f"{violation.format()}\n")
+        sys.stdout.write(f"\n{len(violations)} DDD violation(s) found.\n")
         return 1
 
-    print("DDD linter passed.")
+    sys.stdout.write("DDD linter passed.\n")
     return 0
 
 
@@ -338,7 +340,7 @@ def check_repositories(modules: list[ModuleInfo]) -> list[Violation]:
     return violations
 
 
-def check_tests(modules: list[ModuleInfo]) -> list[Violation]:
+def check_tests(_modules: list[ModuleInfo]) -> list[Violation]:
     """Check that existing test files follow layer-oriented placement."""
     violations: list[Violation] = []
     for path in python_files(TEST_ROOT):

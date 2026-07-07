@@ -17,7 +17,7 @@ repo-local skill:
 - `.agents/skills/ddd-testing/SKILL.md` - test placement, mirrored structure,
   and Arrange / Act / Assert conventions.
 - `.agents/skills/ddd-review/SKILL.md` - architectural review and
-  deterministic `tools/ddd_linter.py` checks.
+  deterministic `backend/scripts/ddd_linter.py` checks.
 
 The canonical skill content lives under `.agents/skills/`. `.codex/skills/`
 contains symlinks to those canonical skill directories.
@@ -244,9 +244,9 @@ Run these after relevant changes:
 uv run ruff check backend
 uv run ty check backend/app
 uv run pytest backend/tests
-uv run python tools/ddd_linter.py
+uv run python backend/scripts/ddd_linter.py
 ```
 
-`tools/ddd_linter.py` is intentionally stricter than the current codebase. If
+`backend/scripts/ddd_linter.py` is intentionally stricter than the current codebase. If
 it reports existing debt, either fix the debt in the same task or document the
 remaining violations in the final response.

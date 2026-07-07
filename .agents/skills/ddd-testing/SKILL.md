@@ -165,5 +165,5 @@ Run:
 
 ```bash
 uv run pytest backend/tests
-uv run python tools/ddd_linter.py --check tests
+uv run python backend/scripts/ddd_linter.py --check tests
 ```

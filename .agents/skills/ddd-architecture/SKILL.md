@@ -30,7 +30,7 @@ outer layers.
 3. Choose the narrowest layer that owns the concept.
 4. Check existing local patterns before adding abstractions.
 5. Keep edits scoped to the requested behavior.
-6. After edits, run `uv run python tools/ddd_linter.py` or explain why the
+6. After edits, run `uv run python backend/scripts/ddd_linter.py` or explain why the
    task intentionally leaves violations.
 
 ## Layers

@@ -75,12 +75,12 @@ Run the relevant subset, and run all before broad backend completion:
 uv run ruff check backend
 uv run ty check backend/app
 uv run pytest backend/tests
-uv run python tools/ddd_linter.py
+uv run python backend/scripts/ddd_linter.py
 ```
 
 ## DDD Linter Policy
 
-`tools/ddd_linter.py` is the executable architecture policy. It should cover
+`backend/scripts/ddd_linter.py` is the executable architecture policy. It should cover
 every convention that can be checked statically.
 
 Required check categories:
