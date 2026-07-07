@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .entities import AnyJob, Job, JobContract, JobEvent, JobEventPayload, JobFile
+from .entities import AnyJob, Job, JobContract, JobEvent, JobFile
 from .exceptions import (
     DuplicateJobContractError,
     JobCancelAccessDeniedError,
@@ -26,6 +26,7 @@ from .value_objects import (
     ActorType,
     Initiator,
     JobError,
+    JobEventPayload,
     JobFileRole,
     JobStatus,
 )

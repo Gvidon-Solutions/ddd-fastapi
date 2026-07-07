@@ -1,19 +1,10 @@
 """Provide the use case for listing items."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 
-from app.domain.item.entities import Item
 from app.domain.item.repositories import ItemRepository
+from app.domain.item.value_objects import FindItemsResult
 from app.domain.user.entities import User
-
-
-@dataclass(frozen=True)
-class FindItemsResult:
-    """Represent a paginated item listing result."""
-
-    data: list[Item]
-    count: int
 
 
 class FindItemsUseCase(ABC):

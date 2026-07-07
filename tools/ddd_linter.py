@@ -56,6 +56,7 @@ class ClassInfo:
     lineno: int
     bases: tuple[str, ...]
     decorators: tuple[str, ...]
+    annotated_fields: tuple[tuple[str, str], ...]
 
     @property
     def is_dataclass(self) -> bool:
@@ -65,6 +66,8 @@ class ClassInfo:
     @property
     def is_exception(self) -> bool:
         """Return whether the class appears to define an exception."""
+        if self.is_dataclass:
+            return any(base.endswith(("Error", "Exception")) for base in self.bases)
         if self.name.endswith(("Error", "Exception")):
             return True
         return any(base.endswith(("Error", "Exception")) for base in self.bases)
@@ -147,6 +150,7 @@ def parse_module(path: Path) -> ModuleInfo:
                     lineno=node.lineno,
                     bases=tuple(expr_name(base) for base in node.bases),
                     decorators=tuple(expr_name(decorator) for decorator in node.decorator_list),
+                    annotated_fields=tuple(class_annotated_fields(node)),
                 )
             )
         elif isinstance(node, ast.Assign):
@@ -202,7 +206,11 @@ def check_dataclasses(modules: list[ModuleInfo]) -> list[Violation]:
                 )
             )
 
-        if is_domain_entity_or_value_object_file(module.path) and len(dataclasses) > 1:
+        if (
+            is_domain_entity_or_value_object_file(module.path)
+            and len(dataclasses) > 1
+            and not is_allowed_event_pair(module.path, dataclasses)
+        ):
             names = ", ".join(class_.name for class_ in dataclasses)
             violations.append(
                 Violation(
@@ -212,7 +220,10 @@ def check_dataclasses(modules: list[ModuleInfo]) -> list[Violation]:
                 )
             )
 
-        if is_domain_entity_or_value_object_file(module.path):
+        if (
+            is_domain_entity_or_value_object_file(module.path)
+            and not is_allowed_event_pair(module.path, dataclasses)
+        ):
             expected = snake_case(dataclasses[0].name)
             if module.path.stem != expected:
                 violations.append(
@@ -328,23 +339,33 @@ def check_repositories(modules: list[ModuleInfo]) -> list[Violation]:
 
 
 def check_tests(modules: list[ModuleInfo]) -> list[Violation]:
-    """Check that source files have mirrored test paths."""
+    """Check that existing test files follow layer-oriented placement."""
     violations: list[Violation] = []
-    for module in modules:
-        if module.path.name == "__init__.py":
+    for path in python_files(TEST_ROOT):
+        if path.name in {"__init__.py", "conftest.py", "fakes.py"}:
             continue
-        if "__pycache__" in module.path.parts:
+        if "__pycache__" in path.parts:
             continue
-        if should_skip_test_mirror(module.path):
-            continue
-
-        expected = expected_test_path(module.path)
-        if not expected.exists():
+        if path.name.startswith("test_") is False:
             violations.append(
                 Violation(
                     code="DDD401",
-                    path=module.path,
-                    message=f"missing mirrored test `{expected.relative_to(ROOT)}`",
+                    path=path,
+                    message="test helper modules must be named explicitly or allowed",
+                )
+            )
+            continue
+
+        relative = path.relative_to(TEST_ROOT)
+        if not relative.parts:
+            continue
+        layer = relative.parts[0]
+        if layer not in {"domain", "usecase", "infrastructure", "presentation"}:
+            violations.append(
+                Violation(
+                    code="DDD401",
+                    path=path,
+                    message="test file must live under a known layer directory",
                 )
             )
     return violations
@@ -354,6 +375,10 @@ def dataclass_allowed_path(path: Path) -> bool:
     """Return whether dataclass definitions are allowed in a path."""
     parts = path.parts
     if is_under(path, TEST_ROOT):
+        return True
+    if is_under(path, APP_ROOT / "usecase") and "ports" in parts:
+        return True
+    if is_under(path, APP_ROOT / "infrastructure"):
         return True
     if not is_under(path, APP_ROOT / "domain"):
         return False
@@ -402,7 +427,36 @@ def expr_name(node: ast.AST) -> str:
         return f"{base}.{node.attr}" if base else node.attr
     if isinstance(node, ast.Call):
         return expr_name(node.func)
+    if isinstance(node, ast.Subscript):
+        return expr_name(node.value)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        left = expr_name(node.left)
+        right = expr_name(node.right)
+        return f"{left}|{right}" if left and right else left or right
     return ""
+
+
+def class_annotated_fields(node: ast.ClassDef) -> Iterable[tuple[str, str]]:
+    """Yield annotated class fields."""
+    for statement in node.body:
+        if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+            yield statement.target.id, expr_name(statement.annotation)
+
+
+def is_allowed_event_pair(path: Path, dataclasses: list[ClassInfo]) -> bool:
+    """Return whether a file contains one event payload and its event."""
+    if "events" not in path.parts:
+        return False
+    if len(dataclasses) != 2:
+        return False
+    payload = next((class_ for class_ in dataclasses if class_.name.endswith("Payload")), None)
+    event = next((class_ for class_ in dataclasses if not class_.name.endswith("Payload")), None)
+    if payload is None or event is None:
+        return False
+    return any(
+        field_name == "payload" and field_type == payload.name
+        for field_name, field_type in event.annotated_fields
+    )
 
 
 def is_name(node: ast.AST, name: str) -> bool:

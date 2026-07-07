@@ -4,6 +4,14 @@
 
 Use Cases (Application Services) orchestrate domain objects to fulfill a single application action. Each use case has one public `execute` method.
 
+Use cases receive domain input and return domain output. They do not expose
+DTOs, presentation schemas, SQLAlchemy/SQLModel models, Redis records, ARQ jobs,
+or raw persistence payloads.
+
+Usecase-local ports are allowed under `backend/app/usecase/**/ports/` for
+external capabilities needed by an application workflow. Repository ports for
+persisted domain entities belong in `backend/app/domain/**/repositories/`.
+
 ## Structure Pattern
 
 Every use case follows the same three-part structure:
@@ -145,7 +153,13 @@ def start_todo(
 
 - One use case class per action (Create, Start, Complete, Update, Delete, FindById, FindAll)
 - Abstract interface + implementation keeps the UseCase layer testable
-- Use cases receive domain Value Objects as parameters, not raw primitives
-- Use cases return domain entities, not DTOs or schemas
+- Use cases receive domain entities/value objects or typed domain command
+  objects, not DTOs or presentation schemas
+- Use cases return domain entities/value objects, typed domain results, or
+  `None` for command-style actions
+- Usecase-local ports may model external capabilities required by the
+  application workflow
+- Repository ports for persisted domain entities live in domain
+  `repositories/`, not usecase `ports/`
 - Domain exception handling belongs in the use case; HTTP mapping belongs in the handler
 - Factory functions (`new_*`) hide implementation details from consumers

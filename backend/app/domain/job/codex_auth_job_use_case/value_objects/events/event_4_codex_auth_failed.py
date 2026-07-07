@@ -6,7 +6,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 from uuid import UUID, uuid4
 
-from app.domain.job.base.entities import JobEvent, JobEventPayload
+from app.domain.job.base.entities import JobEvent
+from app.domain.job.base.value_objects import JobEventPayload
 
 
 @dataclass(kw_only=True)

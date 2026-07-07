@@ -3,25 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
 from app.domain.job.base.entities import AnyJob, Job, JobEvent, JobFile
-from app.domain.job.base.value_objects import JobError, JobFileRole, JobStatus
+from app.domain.job.base.value_objects import JobError, JobFileRole
 from app.domain.job.base.value_objects.job_details import JobDetails
+from app.domain.job.base.value_objects.job_execution_record import JobExecutionRecord
 from app.domain.job.base.value_objects.job_summary import JobSummary
-
-
-@dataclass(frozen=True)
-class JobExecutionRecord:
-    """Raw job data needed by the execution boundary."""
-
-    job_id: UUID
-    type: str
-    version: str
-    input: dict
-    status: JobStatus
 
 
 class JobRepository(ABC):

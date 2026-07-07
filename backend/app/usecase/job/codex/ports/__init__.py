@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from app.domain.job.codex_run_job_use_case import CodexExecFailedError
+
 from .codex_authenticator import CodexAuthenticator
 from .codex_executor import (
-    CodexExecFailedError,
     CodexExecLogFile,
     CodexExecResult,
     CodexExecutor,

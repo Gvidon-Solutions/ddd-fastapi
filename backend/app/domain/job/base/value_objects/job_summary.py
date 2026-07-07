@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from app.domain.job.base.value_objects.actor import Initiator
+from app.domain.job.base.value_objects.initiator import Initiator
 from app.domain.job.base.value_objects.job_status import JobStatus
 
 

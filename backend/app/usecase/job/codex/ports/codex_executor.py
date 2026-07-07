@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from app.domain.job.codex_run_job_use_case import CodexExecFailedError
+
 
 @dataclass(frozen=True)
 class CodexExecLogFile:
@@ -21,10 +23,6 @@ class CodexExecLogFile:
     def metadata(self) -> dict:
         """Return file metadata."""
         return {"filename": self.filename, "source": "codex"}
-
-
-class CodexExecFailedError(RuntimeError):
-    """Raised when Codex exec finishes unsuccessfully."""
 
 
 @dataclass(frozen=True)

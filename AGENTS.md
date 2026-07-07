@@ -8,15 +8,15 @@ are project law for AI agents and human reviewers.
 Before changing code, decompose the request by layer and use the matching
 repo-local skill:
 
-- `.agents/skills/skills-ddd-architecture/SKILL.md` - domain, entities, value
+- `.agents/skills/ddd-architecture/SKILL.md` - domain, entities, value
   objects, repositories, exceptions, use cases, and layer boundaries.
-- `.agents/skills/skills-ddd-jobs/SKILL.md` - job contracts, launch flow,
+- `.agents/skills/ddd-jobs/SKILL.md` - job contracts, launch flow,
   dispatcher, ARQ workers, cancellation, events, files, and Codex business jobs.
-- `.agents/skills/skills-ddd-presentation/SKILL.md` - FastAPI routes, schemas,
+- `.agents/skills/ddd-presentation/SKILL.md` - FastAPI routes, schemas,
   DI, and exception-to-HTTP mapping.
-- `.agents/skills/skills-ddd-testing/SKILL.md` - test placement and Arrange /
-  Act / Assert conventions.
-- `.agents/skills/skills-ddd-review/SKILL.md` - architectural review and
+- `.agents/skills/ddd-testing/SKILL.md` - test placement, mirrored structure,
+  and Arrange / Act / Assert conventions.
+- `.agents/skills/ddd-review/SKILL.md` - architectural review and
   deterministic `tools/ddd_linter.py` checks.
 
 The canonical skill content lives under `.agents/skills/`. `.codex/skills/`

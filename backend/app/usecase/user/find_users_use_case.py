@@ -1,19 +1,11 @@
 """Provide the use case for listing users."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 
 from app.domain.user.entities import User
 from app.domain.user.exceptions import UserAccessDeniedError
 from app.domain.user.repositories import UserRepository
-
-
-@dataclass(frozen=True)
-class FindUsersResult:
-    """Represent a paginated user listing result."""
-
-    data: list[User]
-    count: int
+from app.domain.user.value_objects import FindUsersResult
 
 
 class FindUsersUseCase(ABC):

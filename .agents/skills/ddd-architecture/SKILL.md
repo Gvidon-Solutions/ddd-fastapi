@@ -1,5 +1,5 @@
 ---
-name: skills-ddd-architecture
+name: ddd-architecture
 description: Use when changing backend architecture, domain models, entities, value objects, repository ports, exceptions, use cases, ports, DTO boundaries, or any code that may affect DDD/Onion Architecture layering in this repository.
 ---
 
@@ -159,11 +159,17 @@ Rules:
 
 - One use case per application action.
 - Use case interface exposes one public `execute(...)` method.
-- Use cases receive/return domain objects or domain value objects, not DTOs or
-  presentation schemas.
+- Use cases receive domain objects/value objects and return domain
+  objects/value objects or typed domain results.
+- Use cases never receive or return DTOs, presentation schemas, SQLModel
+  models, Redis records, ARQ jobs, or raw persistence payloads.
 - Use cases raise domain exceptions for business failures.
 - Use cases may perform access checks and ownership rules when those rules
   affect the action.
+- Usecase-local ports are allowed under `backend/app/usecase/**/ports/` for
+  external capabilities needed by an application workflow.
+- Repository ports for persisted domain entities stay in domain
+  `repositories/`, not usecase `ports/`.
 - Presentation must not duplicate usecase business checks by reading
   repositories directly.
 - Factory functions are named `new_*_use_case`.
@@ -213,6 +219,8 @@ Rules:
 ## File Rules
 
 - One primary entity/value object/exception per file.
+- Event files may contain one `*Payload` value object and one event class when
+  the event class has a `payload` field typed with that payload class.
 - File name is snake_case of the class name.
 - Re-export public domain types from package `__init__.py` only after checking
   import cycles.
@@ -222,11 +230,11 @@ Rules:
 
 Read these local references when more detail is needed:
 
-- `skills/skills-ddd-architecture/references/ARCHITECTURE.md`
-- `skills/skills-ddd-architecture/references/ENTITIES.md`
-- `skills/skills-ddd-architecture/references/VALUE_OBJECTS.md`
-- `skills/skills-ddd-architecture/references/REPOSITORIES.md`
-- `skills/skills-ddd-architecture/references/USECASES.md`
+- `.agents/skills/ddd-architecture/references/ARCHITECTURE.md`
+- `.agents/skills/ddd-architecture/references/ENTITIES.md`
+- `.agents/skills/ddd-architecture/references/VALUE_OBJECTS.md`
+- `.agents/skills/ddd-architecture/references/REPOSITORIES.md`
+- `.agents/skills/ddd-architecture/references/USECASES.md`
 
 Also useful:
 
