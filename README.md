@@ -26,6 +26,7 @@ sources/             Local references, intentionally not committed
 uv run --project backend ruff check backend/app backend/tests
 uv run --project backend ty check backend/app
 uv run --project backend pytest
+uv run --project backend python tools/e2e_jobs.py
 ```
 
 ## Redis and ARQ
@@ -35,6 +36,15 @@ Redis is used as the ARQ job backend for Codex jobs.
 ```bash
 docker run -d --name skills-dddpy-redis -p 6379:6379 redis:7-alpine
 uv run --project backend arq app.infrastructure.arq.worker.WorkerSettings
+```
+
+The reproducible job e2e smoke test starts disposable PostgreSQL and Redis
+containers, launches the FastAPI app and ARQ worker, creates a Codex auth job via
+HTTP, and verifies that it moves from `pending` to `succeeded` with events,
+result, list, and detail endpoints:
+
+```bash
+uv run --project backend python tools/e2e_jobs.py
 ```
 
 Codex CLI device-code login is exposed for backend admins:

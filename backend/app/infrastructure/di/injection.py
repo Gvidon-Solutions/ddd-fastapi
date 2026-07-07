@@ -40,11 +40,15 @@ from app.usecase.job import (
     CreateJobUseCase,
     FileStorage,
     GetCodexAuthCodeUseCase,
+    GetJobDetailsUseCase,
     JobRuntime,
+    ListJobsUseCase,
     new_cancel_job_use_case,
     new_codex_auth_use_case,
     new_create_job_use_case,
     new_get_codex_auth_code_use_case,
+    new_get_job_details_use_case,
+    new_list_jobs_use_case,
 )
 from app.usecase.user import (
     AuthenticateUserUseCase,
@@ -182,6 +186,20 @@ def get_cancel_job_use_case(
         jobs=jobs,
         runtime=runtime,
     )
+
+
+def get_list_jobs_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+) -> ListJobsUseCase:
+    """Provide the list-jobs use case."""
+    return new_list_jobs_use_case(jobs=jobs)
+
+
+def get_job_details_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+) -> GetJobDetailsUseCase:
+    """Provide the get-job-details use case."""
+    return new_get_job_details_use_case(jobs=jobs)
 
 
 def get_create_item_use_case(

@@ -9,7 +9,6 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domain.job import JobError, JobStatus
-from app.infrastructure.arq.job_workers import worker_bindings
 from app.infrastructure.sqlmodel.job.job_dto import JobDTO, _error_to_record
 from app.usecase.job.ports import JobRuntime
 
@@ -55,6 +54,8 @@ class JobDispatcher:
         return dispatched
 
     async def _dispatch(self, row: JobDTO, *, now: datetime) -> bool:
+        from app.infrastructure.arq.job_workers import worker_bindings
+
         worker = worker_bindings.get(type=row.type, version=row.version)
         if worker is None:
             await self._mark_binding_missing(row, now=now)
