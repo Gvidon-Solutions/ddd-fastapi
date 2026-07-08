@@ -4,7 +4,7 @@ import pytest
 
 from app.domain.item.entities import Item
 from app.domain.item.exceptions import ItemAccessDeniedError, ItemNotFoundError
-from app.domain.item.value_objects import ItemDescription, ItemId, ItemTitle
+from app.domain.item.value_objects import ItemDescription, ItemTitle, new_item_id
 from app.domain.user.entities import User
 from app.usecase.item import (
     new_create_item_use_case,
@@ -110,7 +110,7 @@ async def test_find_item_by_id_raises_not_found(user: User) -> None:
 
     # Act / Assert
     with pytest.raises(ItemNotFoundError):
-        await use_case.execute(user, ItemId.generate())
+        await use_case.execute(user, new_item_id())
 
 
 async def test_update_item_updates_owned_item(user: User, item: Item) -> None:

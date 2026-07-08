@@ -91,12 +91,12 @@ def update_title(self, new_title: TodoTitle) -> None:
 
 ### Factory Methods
 
-Use static factory methods for creation with generated identifiers:
+Use class factory methods for creation with generated identifiers:
 
 ```python
-@staticmethod
-def create(title: TodoTitle, description: Optional[TodoDescription] = None) -> "Todo":
-    return Todo(TodoId.generate(), title, description)
+@classmethod
+def create(cls, title: TodoTitle, description: Optional[TodoDescription] = None) -> "Todo":
+    return cls(new_todo_id(), title, description)
 ```
 
 ### Domain Query Methods

@@ -52,7 +52,7 @@ class UserDTO(SQLModel, table=True):
     def from_entity(cls, user: User) -> "UserDTO":
         """Build a persistence DTO from a domain entity."""
         return cls(
-            id=user.id.value,
+            id=user.id,
             email=user.email.value,
             hashed_password=user.hashed_password.value,
             is_active=user.is_active,

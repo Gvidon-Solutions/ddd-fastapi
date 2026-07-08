@@ -3,7 +3,12 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from app.domain.item.value_objects import ItemDescription, ItemId, ItemTitle
+from app.domain.item.value_objects import (
+    ItemDescription,
+    ItemId,
+    ItemTitle,
+    new_item_id,
+)
 from app.domain.user.value_objects import UserId
 
 
@@ -54,7 +59,7 @@ class Item:
     ) -> "Item":
         """Create a new item with a generated identifier."""
         return cls(
-            id=ItemId.generate(),
+            id=new_item_id(),
             owner_id=owner_id,
             title=title,
             description=description,

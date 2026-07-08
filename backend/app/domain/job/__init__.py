@@ -37,6 +37,7 @@ from .base import (
     UnknownJobContractError,
     get_job_class,
     get_job_type_registry,
+    new_job_id,
 )
 
 __all__ = (
@@ -74,4 +75,5 @@ __all__ = (
     "UnknownJobContractError",
     "get_job_class",
     "get_job_type_registry",
+    "new_job_id",
 )

@@ -27,8 +27,8 @@ class JobFilePublic(SQLModel):
     def from_entity(cls, job_file: JobFile) -> "JobFilePublic":
         """Build an API response from a domain entity."""
         return cls(
-            file_id=job_file.file_id.value,
-            job_id=job_file.job_id.value,
+            file_id=job_file.file_id,
+            job_id=job_file.job_id,
             role=job_file.role.value,
             name=job_file.name,
             kind=job_file.kind.value,

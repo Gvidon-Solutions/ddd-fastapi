@@ -4,7 +4,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.domain.user.exceptions import SuperuserSelfDeletionError
-from app.domain.user.value_objects import EmailAddress, FullName, PasswordHash, UserId
+from app.domain.user.value_objects import (
+    EmailAddress,
+    FullName,
+    PasswordHash,
+    UserId,
+    new_user_id,
+)
 
 
 def _utc_now() -> datetime:
@@ -78,7 +84,7 @@ class User:
     ) -> "User":
         """Create a new user with a generated identifier."""
         return cls(
-            id=UserId.generate(),
+            id=new_user_id(),
             email=email,
             hashed_password=hashed_password,
             full_name=full_name,

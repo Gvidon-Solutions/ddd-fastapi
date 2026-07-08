@@ -1,10 +1,11 @@
 """Job route tests."""
 
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, WebSocket
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
@@ -28,8 +29,19 @@ from app.infrastructure.di import (
 )
 from app.main import app
 from app.presentation.api.common.deps import get_current_user
-from app.presentation.api.job.routes.jobs import cancel_job, get_job_details, list_jobs
-from app.usecase.job import CancelJobUseCase, GetJobDetailsUseCase, ListJobsUseCase
+from app.presentation.api.job.routes.jobs import (
+    cancel_job,
+    get_job_details,
+    list_jobs,
+    listen_job_events,
+)
+from app.usecase.job import (
+    CancelJobUseCase,
+    GetJobDetailsUseCase,
+    JobEventStream,
+    JobEventStreamMessage,
+    ListJobsUseCase,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -82,6 +94,47 @@ class FakeGetJobDetailsUseCase(GetJobDetailsUseCase):
         return self.details
 
 
+class FakeJobEventStream(JobEventStream):
+    """Return fixed realtime job event messages."""
+
+    def __init__(self, messages: list[JobEventStreamMessage]) -> None:
+        self.messages = messages
+        self.calls: list[tuple[JobId, str]] = []
+
+    async def listen(
+        self,
+        job_id: JobId,
+        *,
+        last_event_id: str = "0-0",
+    ):
+        """Yield fixed messages."""
+        self.calls.append((job_id, last_event_id))
+        for message in self.messages:
+            yield message
+
+
+class FakeWebSocket:
+    """Capture WebSocket operations."""
+
+    def __init__(self, *, last_event_id: str = "0-0") -> None:
+        self.query_params = {"last_event_id": last_event_id}
+        self.accepted = False
+        self.closed_code: int | None = None
+        self.json_messages: list[dict] = []
+
+    async def accept(self) -> None:
+        """Accept the fake socket."""
+        self.accepted = True
+
+    async def close(self, *, code: int) -> None:
+        """Close the fake socket."""
+        self.closed_code = code
+
+    async def send_json(self, data: dict) -> None:
+        """Capture JSON messages."""
+        self.json_messages.append(data)
+
+
 def _job_summary(user, *, job_id: UUID | None = None) -> JobSummary:
     now = datetime.now(UTC)
     return JobSummary(
@@ -131,7 +184,7 @@ async def test_list_jobs_returns_current_user_jobs(user) -> None:
 
     # Assert
     assert result.count == 1
-    assert result.data[0].id == summary.id.value
+    assert result.data[0].id == summary.id
     assert result.data[0].status == "pending"
     assert use_case.calls == [user.id]
 
@@ -154,6 +207,42 @@ async def test_get_job_details_returns_current_user_job(user) -> None:
     assert result.input == {"kind": "test"}
     assert result.events == []
     assert use_case.calls == [(JobId(job_id), user.id)]
+
+
+async def test_list_job_events_streams_authorized_job_events(user) -> None:
+    # Arrange
+    job_id = uuid4()
+    details = _job_details(user, job_id=job_id)
+    details_use_case = FakeGetJobDetailsUseCase(details=details)
+    event_stream = FakeJobEventStream(
+        [
+            JobEventStreamMessage(
+                stream_id="1-0",
+                event={"type": "CodexRunStartedV1", "payload": {"job_id": str(job_id)}},
+            )
+        ]
+    )
+    websocket = FakeWebSocket(last_event_id="0-0")
+
+    # Act
+    await listen_job_events(
+        websocket=cast(WebSocket, websocket),
+        current_user=user,
+        job_id=job_id,
+        details_use_case=details_use_case,
+        event_stream=event_stream,
+    )
+
+    # Assert
+    assert websocket.accepted is True
+    assert websocket.closed_code is None
+    assert event_stream.calls == [(JobId(job_id), "0-0")]
+    assert websocket.json_messages == [
+        {
+            "stream_id": "1-0",
+            "event": {"type": "CodexRunStartedV1", "payload": {"job_id": str(job_id)}},
+        }
+    ]
 
 
 async def test_get_job_details_returns_404_when_job_is_missing(user) -> None:
@@ -204,7 +293,7 @@ async def test_list_jobs_api_route_returns_current_user_jobs(user) -> None:
     # Assert
     assert response.status_code == 200
     assert response.json()["count"] == 1
-    assert response.json()["data"][0]["id"] == str(summary.id.value)
+    assert response.json()["data"][0]["id"] == str(summary.id)
 
 
 async def test_get_job_details_api_route_returns_current_user_job(user) -> None:

@@ -17,6 +17,7 @@ from app.domain.job import (
     JobRepository,
     JobStatus,
     JobSummary,
+    new_job_id,
 )
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthInputV1,
@@ -220,7 +221,7 @@ def _use_case(
 
 
 async def test_get_codex_auth_code_returns_none_until_ready() -> None:
-    job_id = JobId.generate()
+    job_id = new_job_id()
     use_case = _use_case(
         jobs=FakeJobRepository({job_id: _job(job_id=job_id)}),
         auth_sessions=FakeAuthSessionRepository(),
@@ -232,7 +233,7 @@ async def test_get_codex_auth_code_returns_none_until_ready() -> None:
 
 
 async def test_get_codex_auth_code_returns_session_data_when_ready() -> None:
-    job_id = JobId.generate()
+    job_id = new_job_id()
     use_case = _use_case(
         jobs=FakeJobRepository({job_id: _job(job_id=job_id)}),
         auth_sessions=FakeAuthSessionRepository(_session(job_id)),
@@ -252,11 +253,11 @@ async def test_get_codex_auth_code_raises_when_job_is_missing() -> None:
     )
 
     with pytest.raises(CodexAuthCodeJobNotFoundError):
-        await use_case.execute(job_id=JobId.generate(), current_user_id=USER_ID)
+        await use_case.execute(job_id=new_job_id(), current_user_id=USER_ID)
 
 
 async def test_get_codex_auth_code_raises_when_job_is_not_auth_job() -> None:
-    job_id = JobId.generate()
+    job_id = new_job_id()
     use_case = _use_case(
         jobs=FakeJobRepository({job_id: _job(job_id=job_id, job_type="execute_codex_run_job_use_case")}),
         auth_sessions=FakeAuthSessionRepository(),
@@ -267,7 +268,7 @@ async def test_get_codex_auth_code_raises_when_job_is_not_auth_job() -> None:
 
 
 async def test_get_codex_auth_code_raises_when_user_does_not_own_job() -> None:
-    job_id = JobId.generate()
+    job_id = new_job_id()
     use_case = _use_case(
         jobs=FakeJobRepository({job_id: _job(job_id=job_id, user_id=OTHER_USER_ID)}),
         auth_sessions=FakeAuthSessionRepository(),

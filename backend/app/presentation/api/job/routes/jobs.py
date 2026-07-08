@@ -2,7 +2,14 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 
 from app.domain.job import (
     JobCancelAccessDeniedError,
@@ -15,16 +22,22 @@ from app.domain.job import (
 from app.infrastructure.di import (
     get_cancel_job_use_case,
     get_job_details_use_case,
+    get_job_event_stream,
     get_list_jobs_use_case,
 )
-from app.presentation.api.common.deps import CurrentUser
+from app.presentation.api.common.deps import CurrentUser, WebSocketCurrentUser
 from app.presentation.api.job import (
     JobCancelPublic,
     JobDetailsPublic,
     JobsPublic,
     JobSummaryPublic,
 )
-from app.usecase.job import CancelJobUseCase, GetJobDetailsUseCase, ListJobsUseCase
+from app.usecase.job import (
+    CancelJobUseCase,
+    GetJobDetailsUseCase,
+    JobEventStream,
+    ListJobsUseCase,
+)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -74,3 +87,36 @@ async def cancel_job(
     except JobCancelNotAllowedError:
         raise HTTPException(status_code=409, detail="Job was not cancelled")
     return JobCancelPublic(job_id=job_id, cancelled=True)
+
+
+@router.websocket("/{job_id}/events")
+async def listen_job_events(
+    websocket: WebSocket,
+    current_user: WebSocketCurrentUser,
+    job_id: UUID,
+    details_use_case: GetJobDetailsUseCase = Depends(get_job_details_use_case),
+    event_stream: JobEventStream = Depends(get_job_event_stream),
+) -> None:
+    """Stream all realtime events for one job."""
+    typed_job_id = JobId(job_id)
+    try:
+        await details_use_case.execute(typed_job_id, current_user_id=current_user.id)
+    except (JobReadNotFoundError, JobReadAccessDeniedError):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    last_event_id = websocket.query_params.get("last_event_id", "0-0")
+    try:
+        async for message in event_stream.listen(
+            typed_job_id,
+            last_event_id=last_event_id,
+        ):
+            await websocket.send_json(
+                {
+                    "stream_id": message.stream_id,
+                    "event": message.event,
+                }
+            )
+    except WebSocketDisconnect:
+        return

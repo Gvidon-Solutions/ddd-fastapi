@@ -230,6 +230,41 @@ async def test_codex_executor_accepts_full_codex_exec_options(tmp_path: Path) ->
     assert captured["process"].stdin.content == b""
 
 
+async def test_codex_executor_streams_output_lines_to_handler(tmp_path: Path) -> None:
+    # Arrange
+    captured_lines = []
+
+    async def process_factory(*_args, **_kwargs):
+        return FakeProcess(
+            stdout_lines=[b"stdout one\n", b"stdout two\n"],
+            stderr_lines=[b"stderr one\n"],
+        )
+
+    async def output_handler(line) -> None:
+        captured_lines.append(line)
+
+    executor = CodexCliExecutor(
+        codex_home=tmp_path / ".codex_work_dir",
+        process_factory=process_factory,
+    )
+
+    # Act
+    result = await executor.codex_exec(
+        prompt="Review repository",
+        workdir=tmp_path / "workdir",
+        output_handler=output_handler,
+    )
+
+    # Assert
+    assert result.stdout_lines == ["stdout one", "stdout two"]
+    assert result.stderr_lines == ["stderr one"]
+    assert [(line.channel, line.line_number, line.line) for line in captured_lines] == [
+        ("stdout", 1, "stdout one"),
+        ("stdout", 2, "stdout two"),
+        ("stderr", 1, "stderr one"),
+    ]
+
+
 class BlockingFakeProcess(FakeProcess):
     """Fake subprocess that waits until released."""
 

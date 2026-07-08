@@ -2,13 +2,13 @@
 
 from uuid import UUID
 
-from app.domain.file import FileId
+from app.domain.file import new_file_id
 
 
 def test_file_id_generates_uuid() -> None:
     # Act
-    file_id = FileId.generate()
+    file_id = new_file_id()
 
     # Assert
-    assert isinstance(file_id.value, UUID)
-    assert str(file_id) == str(file_id.value)
+    assert isinstance(file_id, UUID)
+    assert str(file_id) == str(file_id)

@@ -11,7 +11,11 @@ from app.domain.item.repositories import ItemRepository
 from app.domain.job import JobRepository
 from app.domain.job.codex_auth_job_use_case import CodexAuthSessionRepository
 from app.domain.user.repositories import UserRepository
-from app.infrastructure.arq import new_arq_job_runtime
+from app.infrastructure.arq import (
+    new_arq_job_runtime,
+    new_redis_pool_event_publisher,
+    new_redis_pool_job_event_stream,
+)
 from app.infrastructure.codex import (
     new_codex_authenticator,
     new_redis_codex_auth_session_repository,
@@ -38,9 +42,11 @@ from app.usecase.job import (
     CodexAuthenticator,
     CodexAuthUseCase,
     CreateJobUseCase,
+    EventPublisher,
     FileStorage,
     GetCodexAuthCodeUseCase,
     GetJobDetailsUseCase,
+    JobEventStream,
     JobRuntime,
     ListJobsUseCase,
     new_cancel_job_use_case,
@@ -114,6 +120,16 @@ def get_job_runtime() -> JobRuntime:
     return new_arq_job_runtime()
 
 
+def get_event_publisher() -> EventPublisher:
+    """Provide a job event publisher."""
+    return new_redis_pool_event_publisher()
+
+
+def get_job_event_stream() -> JobEventStream:
+    """Provide a job event stream reader."""
+    return new_redis_pool_job_event_stream()
+
+
 def get_file_storage() -> FileStorage:
     """Provide file storage."""
     return new_filesystem_file_storage()
@@ -155,12 +171,14 @@ def get_codex_auth_use_case(
     auth_sessions: CodexAuthSessionRepository = Depends(
         get_codex_auth_session_repository
     ),
+    event_publisher: EventPublisher = Depends(get_event_publisher),
 ) -> CodexAuthUseCase:
     """Provide the Codex auth use case."""
     return new_codex_auth_use_case(
         jobs=jobs,
         codex_authenticator=codex_authenticator,
         auth_sessions=auth_sessions,
+        event_publisher=event_publisher,
     )
 
 

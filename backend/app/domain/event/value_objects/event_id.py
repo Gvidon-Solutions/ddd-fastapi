@@ -1,20 +1,11 @@
-"""Define the Event identifier value object."""
+"""Define the Event identifier type."""
 
-from dataclasses import dataclass
+from typing import NewType
 from uuid import UUID, uuid4
 
+EventId = NewType("EventId", UUID)
 
-@dataclass(frozen=True)
-class EventId:
-    """Represent the unique identifier for an event."""
 
-    value: UUID
-
-    @classmethod
-    def generate(cls) -> "EventId":
-        """Generate a new identifier for an event."""
-        return cls(uuid4())
-
-    def __str__(self) -> str:
-        """Return the string representation of the UUID."""
-        return str(self.value)
+def new_event_id() -> EventId:
+    """Generate a new identifier for an event."""
+    return EventId(uuid4())

@@ -24,7 +24,7 @@ class JobEventPublic(SQLModel):
     def from_entity(cls, event: JobEvent) -> "JobEventPublic":
         """Build an API response from a domain entity."""
         return cls(
-            event_id=event.event_id.value,
+            event_id=event.event_id,
             type=event.type,
             source=event.source,
             version=event.version,

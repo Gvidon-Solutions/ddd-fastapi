@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .file_id import FileId
+from .file_id import FileId, new_file_id
 from .file_kind import FileKind
 from .file_location import FileLocation
 from .file_status import FileStatus
@@ -12,4 +12,5 @@ __all__ = (
     "FileKind",
     "FileLocation",
     "FileStatus",
+    "new_file_id",
 )

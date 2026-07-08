@@ -28,13 +28,13 @@ class JobSummaryPublic(SQLModel):
     def from_value_object(cls, summary: JobSummary) -> "JobSummaryPublic":
         """Build an API response from a domain value object."""
         return cls(
-            id=summary.id.value,
+            id=summary.id,
             type=summary.type,
             version=summary.version,
             name=summary.name,
             status=summary.status.value,
             initiator=JobInitiatorPublic.from_value_object(summary.initiator),
-            parent_job_id=summary.parent_job_id.value
+            parent_job_id=summary.parent_job_id
             if summary.parent_job_id is not None
             else None,
             requested_at=summary.requested_at,

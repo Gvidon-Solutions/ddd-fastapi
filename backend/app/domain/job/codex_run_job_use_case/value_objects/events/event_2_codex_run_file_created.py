@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-from app.domain.event import EventId
+from app.domain.event import EventId, new_event_id
 from app.domain.file import FileId
 from app.domain.job.base.entities import JobEvent
 from app.domain.job.base.value_objects import JobEventPayload
@@ -27,7 +27,7 @@ class Event2CodexRunFileCreatedPayload(JobEventPayload):
 class Event2CodexRunFileCreated(JobEvent):
     """Represent the Codex run file created event."""
 
-    event_id: EventId = field(default_factory=EventId.generate, init=False)
+    event_id: EventId = field(default_factory=new_event_id, init=False)
     type: Literal["CodexRunFileCreatedV1"] = field(
         default="CodexRunFileCreatedV1",
         init=False,

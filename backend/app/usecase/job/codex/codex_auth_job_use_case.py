@@ -6,7 +6,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
 
-from app.domain.job import JobRepository
+from app.domain.job import JobEvent, JobId, JobRepository
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthFailedError,
     CodexAuthJobV1,
@@ -26,6 +26,7 @@ from app.domain.job.codex_auth_job_use_case import (
 from app.usecase.job.codex.ports import (
     CodexAuthenticator,
 )
+from app.usecase.job.ports import EventPublisher
 
 CODEX_AUTH_JOB_TYPE = CodexAuthJobV1.type
 
@@ -46,18 +47,20 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
         jobs: JobRepository,
         codex_authenticator: CodexAuthenticator,
         auth_sessions: CodexAuthSessionRepository,
+        event_publisher: EventPublisher,
     ):
         """Store use case dependencies."""
         self.jobs = jobs
         self.codex_authenticator = codex_authenticator
         self.auth_sessions = auth_sessions
+        self.event_publisher = event_publisher
 
     async def execute(self, job: CodexAuthJobV1) -> CodexAuthResult:
         """Execute Codex device auth for one persisted job."""
         now = _now()
-        await self.jobs.append_event(
-            job.id,
-            Event1CodexAuthStarted(
+        await self._append_event(
+            job_id=job.id,
+            event=Event1CodexAuthStarted(
                 created_at=now,
                 payload=Event1CodexAuthStartedPayload(job_id=job.id),
             ),
@@ -72,9 +75,9 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
                 user_code=device_auth.device_code,
                 expires_at=now + timedelta(minutes=10),
             )
-            await self.jobs.append_event(
-                job.id,
-                Event2UserLoginRequested(
+            await self._append_event(
+                job_id=job.id,
+                event=Event2UserLoginRequested(
                     created_at=now,
                     payload=Event2UserLoginRequestedPayload(job_id=job.id),
                 ),
@@ -90,9 +93,9 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
             )
             now = _now()
             await self.auth_sessions.mark_authenticated(job.id)
-            await self.jobs.append_event(
-                job.id,
-                Event3CodexAuthSucceeded(
+            await self._append_event(
+                job_id=job.id,
+                event=Event3CodexAuthSucceeded(
                     created_at=now,
                     payload=Event3CodexAuthSucceededPayload(
                         job_id=job.id,
@@ -106,9 +109,9 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
             now = _now()
             reason = "Job cancelled"
             await self.auth_sessions.mark_cancelled(job.id, reason)
-            await self.jobs.append_event(
-                job.id,
-                Event5CodexAuthCancelled(
+            await self._append_event(
+                job_id=job.id,
+                event=Event5CodexAuthCancelled(
                     created_at=now,
                     payload=Event5CodexAuthCancelledPayload(
                         job_id=job.id,
@@ -120,9 +123,9 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
         except Exception as exc:
             now = _now()
             await self.auth_sessions.mark_failed(job.id, str(exc))
-            await self.jobs.append_event(
-                job.id,
-                Event4CodexAuthFailed(
+            await self._append_event(
+                job_id=job.id,
+                event=Event4CodexAuthFailed(
                     created_at=now,
                     payload=Event4CodexAuthFailedPayload(
                         job_id=job.id,
@@ -132,16 +135,24 @@ class CodexAuthUseCaseImpl(CodexAuthUseCase):
             )
             raise
 
+    async def _append_event(self, *, job_id: JobId, event: JobEvent) -> None:
+        """Persist and publish a Codex auth business event."""
+        await self.jobs.append_event(job_id, event)
+        await self.event_publisher.emit(job_id, event)
+
+
 def new_codex_auth_use_case(
     jobs: JobRepository,
     codex_authenticator: CodexAuthenticator,
     auth_sessions: CodexAuthSessionRepository,
+    event_publisher: EventPublisher,
 ) -> CodexAuthUseCase:
     """Instantiate the Codex auth use case."""
     return CodexAuthUseCaseImpl(
         jobs=jobs,
         codex_authenticator=codex_authenticator,
         auth_sessions=auth_sessions,
+        event_publisher=event_publisher,
     )
 
 

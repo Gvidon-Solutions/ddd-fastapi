@@ -4,7 +4,12 @@ import pytest
 
 from app.domain.user.entities import User
 from app.domain.user.exceptions import SuperuserSelfDeletionError
-from app.domain.user.value_objects import EmailAddress, FullName, PasswordHash, UserId
+from app.domain.user.value_objects import (
+    EmailAddress,
+    FullName,
+    PasswordHash,
+    new_user_id,
+)
 
 
 def test_user_create_generates_regular_active_user() -> None:
@@ -38,7 +43,7 @@ def test_user_create_can_create_superuser() -> None:
 
 def test_user_equality_uses_identity() -> None:
     # Arrange
-    user_id = UserId.generate()
+    user_id = new_user_id()
     left = User(user_id, EmailAddress("a@example.com"), PasswordHash("hash"))
     right = User(user_id, EmailAddress("b@example.com"), PasswordHash("hash"))
 

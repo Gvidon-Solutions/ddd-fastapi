@@ -1,13 +1,23 @@
 """Codex route tests."""
 
+from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
+import msgspec
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Response, WebSocket
 from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
-from app.domain.job import Job, JobId
+from app.domain.job import (
+    ActorType,
+    Initiator,
+    Job,
+    JobDetails,
+    JobId,
+    JobStatus,
+)
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthInputV1,
     CodexDeviceAuth,
@@ -24,6 +34,7 @@ from app.presentation.api.codex.routes.codex import (
     get_codex_auth_code_and_url,
     launch_codex_auth,
     launch_codex_run,
+    listen_codex_job_events,
 )
 from app.presentation.api.common.deps import get_current_user
 from app.usecase.job import (
@@ -32,6 +43,9 @@ from app.usecase.job import (
     CodexAuthCodeJobTypeError,
     CreateJobUseCase,
     GetCodexAuthCodeUseCase,
+    GetJobDetailsUseCase,
+    JobEventStream,
+    JobEventStreamMessage,
 )
 
 pytestmark = pytest.mark.anyio
@@ -72,6 +86,86 @@ class FakeGetCodexAuthCodeUseCase(GetCodexAuthCodeUseCase):
         return self.result
 
 
+class FakeGetJobDetailsUseCase(GetJobDetailsUseCase):
+    """Return fixed job details."""
+
+    def __init__(self, details: JobDetails) -> None:
+        self.details = details
+        self.calls: list[tuple[JobId, UserId]] = []
+
+    async def execute(self, job_id: JobId, *, current_user_id: UserId) -> JobDetails:
+        """Return fixed job details."""
+        self.calls.append((job_id, current_user_id))
+        return self.details
+
+
+class FakeJobEventStream(JobEventStream):
+    """Return fixed realtime job event messages."""
+
+    def __init__(self, messages: list[JobEventStreamMessage]) -> None:
+        self.messages = messages
+        self.calls: list[tuple[JobId, str]] = []
+
+    async def listen(
+        self,
+        job_id: JobId,
+        *,
+        last_event_id: str = "0-0",
+    ):
+        """Yield fixed messages."""
+        self.calls.append((job_id, last_event_id))
+        for message in self.messages:
+            yield message
+
+
+class FakeWebSocket:
+    """Capture WebSocket operations."""
+
+    def __init__(self) -> None:
+        self.query_params = {"last_event_id": "0-0"}
+        self.accepted = False
+        self.text_messages: list[str] = []
+        self.closed_code: int | None = None
+
+    async def accept(self) -> None:
+        """Accept the fake socket."""
+        self.accepted = True
+
+    async def close(self, *, code: int) -> None:
+        """Close the fake socket."""
+        self.closed_code = code
+
+    async def send_text(self, data: str) -> None:
+        """Capture text messages."""
+        self.text_messages.append(data)
+
+
+def _job_details(user, *, job_id: UUID) -> JobDetails:
+    now = datetime.now(UTC)
+    return JobDetails(
+        id=JobId(job_id),
+        type="execute_codex_run_job_use_case",
+        version="v1",
+        name="Codex run",
+        status=JobStatus.RUNNING,
+        initiator=Initiator(
+            type=ActorType.USER,
+            external_id=str(user.id),
+            display_name=user.email.value,
+        ),
+        parent_job_id=None,
+        requested_at=now,
+        updated_at=now,
+        started_at=now,
+        finished_at=None,
+        input={},
+        result=None,
+        error=None,
+        files=(),
+        events=(),
+    )
+
+
 async def test_launch_codex_auth_queues_auth_job(user) -> None:
     create_job = FakeCreateJobUseCase()
 
@@ -79,7 +173,7 @@ async def test_launch_codex_auth_queues_auth_job(user) -> None:
 
     assert len(create_job.jobs) == 1
     job = create_job.jobs[0]
-    assert result.job_id == job.id.value
+    assert result.job_id == job.id
     assert job.type == "execute_codex_auth_job_use_case"
     assert job.name == "Codex auth"
     assert job.description == "Authenticate Codex through device login"
@@ -99,7 +193,7 @@ async def test_launch_codex_run_queues_run_job(user) -> None:
 
     assert len(create_job.jobs) == 1
     job = create_job.jobs[0]
-    assert result.job_id == job.id.value
+    assert result.job_id == job.id
     assert job.type == "execute_codex_run_job_use_case"
     assert job.name == "Codex run"
     assert job.description == "Run Codex against a workspace"
@@ -253,3 +347,61 @@ async def test_codex_auth_code_api_route_returns_code(user) -> None:
         "verification_url": "https://example.com/device",
         "device_code": "ABCD-EFGH",
     }
+
+
+async def test_codex_job_events_websocket_streams_typed_codex_events(user) -> None:
+    # Arrange
+    job_id = UUID("11111111-1111-1111-1111-111111111111")
+    details_use_case = FakeGetJobDetailsUseCase(_job_details(user, job_id=job_id))
+    event_stream = FakeJobEventStream(
+        [
+            JobEventStreamMessage(
+                stream_id="1-0",
+                event={
+                    "event_id": "22222222-2222-2222-2222-222222222222",
+                    "type": "OtherEventV1",
+                    "source": "other",
+                    "version": "v1",
+                    "created_at": "2026-07-08T12:30:00Z",
+                    "payload": {},
+                },
+            ),
+            JobEventStreamMessage(
+                stream_id="2-0",
+                event={
+                    "event_id": "33333333-3333-3333-3333-333333333333",
+                    "type": "CodexExecOutputV1",
+                    "source": "codex_exec",
+                    "version": "v1",
+                    "created_at": "2026-07-08T12:31:00Z",
+                    "payload": {
+                        "job_id": str(job_id),
+                        "channel": "stderr",
+                        "line_number": 2,
+                        "line": "warning",
+                    },
+                },
+            ),
+        ]
+    )
+    websocket = FakeWebSocket()
+
+    # Act
+    await listen_codex_job_events(
+        websocket=cast(WebSocket, websocket),
+        current_user=user,
+        job_id=job_id,
+        details_use_case=details_use_case,
+        event_stream=event_stream,
+    )
+
+    # Assert
+    assert websocket.accepted is True
+    assert websocket.closed_code is None
+    assert event_stream.calls == [(JobId(job_id), "0-0")]
+    assert len(websocket.text_messages) == 1
+    message = msgspec.json.decode(websocket.text_messages[0].encode())
+    assert message["stream_id"] == "2-0"
+    assert message["event"]["type"] == "CodexExecOutputV1"
+    assert message["event"]["payload"]["channel"] == "stderr"
+    assert message["event"]["payload"]["line"] == "warning"

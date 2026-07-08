@@ -22,6 +22,8 @@ from .ports import (
     CodexAuthenticator,
     CodexExecFailedError,
     CodexExecLogFile,
+    CodexExecOutputHandler,
+    CodexExecOutputLine,
     CodexExecResult,
     CodexExecutor,
 )
@@ -31,6 +33,8 @@ __all__ = (
     "CodexAuthenticator",
     "CodexExecFailedError",
     "CodexExecLogFile",
+    "CodexExecOutputHandler",
+    "CodexExecOutputLine",
     "CodexExecResult",
     "CodexExecutor",
     "CodexRunJobUseCase",

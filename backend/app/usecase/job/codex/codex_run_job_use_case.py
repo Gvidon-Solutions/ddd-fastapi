@@ -8,11 +8,13 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.domain.file import FileId, FileKind, FileStatus
+from app.domain.file import FileKind, FileStatus, new_file_id
 from app.domain.job import (
     Job,
+    JobEvent,
     JobFile,
     JobFileRole,
+    JobId,
     JobRepository,
 )
 from app.domain.job.codex_run_job_use_case import (
@@ -28,9 +30,15 @@ from app.domain.job.codex_run_job_use_case import (
     Event4CodexRunFailedPayload,
     Event5CodexRunCancelled,
     Event5CodexRunCancelledPayload,
+    Event6CodexExecOutput,
+    Event6CodexExecOutputPayload,
 )
-from app.usecase.job.codex.ports import CodexExecResult, CodexExecutor
-from app.usecase.job.ports import FileStorage
+from app.usecase.job.codex.ports import (
+    CodexExecOutputLine,
+    CodexExecResult,
+    CodexExecutor,
+)
+from app.usecase.job.ports import EventPublisher, FileStorage
 
 
 class CodexRunJobUseCase(ABC):
@@ -50,12 +58,14 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
         storage: FileStorage,
         codex_executor: CodexExecutor,
         default_working_directory: Path,
+        event_publisher: EventPublisher,
     ):
         """Store use case dependencies."""
         self.jobs = jobs
         self.storage = storage
         self.codex_executor = codex_executor
         self.default_working_directory = default_working_directory
+        self.event_publisher = event_publisher
 
     async def execute(self, job: CodexRunJobV1) -> CodexRunOutput:
         """Execute Codex for one persisted job."""
@@ -63,9 +73,9 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
         job_workspace = self._job_workspace(job)
 
         now = _now()
-        await self.jobs.append_event(
-            job.id,
-            Event1CodexRunStarted(
+        await self._append_event(
+            job_id=job.id,
+            event=Event1CodexRunStarted(
                 created_at=now,
                 payload=Event1CodexRunStartedPayload(
                     job_id=job.id,
@@ -79,6 +89,7 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             exec_result = await self.codex_executor.codex_exec(
                 prompt=prompt,
                 workdir=job_workspace,
+                output_handler=self._codex_output_handler(job.id),
             )
             generated_files = await self._collect_generated_files(
                 job=job,
@@ -96,9 +107,9 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
                 generated_files=len(generated_files),
             )
             now = _now()
-            await self.jobs.append_event(
-                job.id,
-                Event3CodexRunSucceeded(
+            await self._append_event(
+                job_id=job.id,
+                event=Event3CodexRunSucceeded(
                     created_at=now,
                     payload=Event3CodexRunSucceededPayload(
                         job_id=job.id,
@@ -113,9 +124,9 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             await self.codex_executor.cancel()
             now = _now()
             reason = "Job cancelled"
-            await self.jobs.append_event(
-                job.id,
-                Event5CodexRunCancelled(
+            await self._append_event(
+                job_id=job.id,
+                event=Event5CodexRunCancelled(
                     created_at=now,
                     payload=Event5CodexRunCancelledPayload(
                         job_id=job.id,
@@ -126,9 +137,9 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             raise
         except Exception as exc:
             now = _now()
-            await self.jobs.append_event(
-                job.id,
-                Event4CodexRunFailed(
+            await self._append_event(
+                job_id=job.id,
+                event=Event4CodexRunFailed(
                     created_at=now,
                     payload=Event4CodexRunFailedPayload(
                         job_id=job.id,
@@ -187,7 +198,7 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             metadata=metadata,
         )
         job_file = JobFile(
-            file_id=FileId.generate(),
+            file_id=new_file_id(),
             name=name,
             kind=kind,
             location=location,
@@ -203,9 +214,9 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             attached_at=_now(),
         )
         await self.jobs.add_file(job_file)
-        await self.jobs.append_event(
-            job.id,
-            Event2CodexRunFileCreated(
+        await self._append_event(
+            job_id=job.id,
+            event=Event2CodexRunFileCreated(
                 created_at=_now(),
                 payload=Event2CodexRunFileCreatedPayload(
                     job_id=job.id,
@@ -215,6 +226,28 @@ class CodexRunJobUseCaseImpl(CodexRunJobUseCase):
             ),
         )
         return job_file
+
+    async def _append_event(self, *, job_id: JobId, event: JobEvent) -> None:
+        """Persist and publish a Codex run business event."""
+        await self.jobs.append_event(job_id, event)
+        await self.event_publisher.emit(job_id, event)
+
+    def _codex_output_handler(self, job_id: JobId):
+        async def handle_output(line: CodexExecOutputLine) -> None:
+            await self._append_event(
+                job_id=job_id,
+                event=Event6CodexExecOutput(
+                    created_at=_now(),
+                    payload=Event6CodexExecOutputPayload(
+                        job_id=job_id,
+                        channel=line.channel,
+                        line_number=line.line_number,
+                        line=line.line,
+                    ),
+                ),
+            )
+
+        return handle_output
 
     async def _collect_generated_files(
         self,
@@ -256,6 +289,7 @@ def new_codex_run_job_use_case(
     storage: FileStorage,
     codex_executor: CodexExecutor,
     default_working_directory: Path,
+    event_publisher: EventPublisher,
 ) -> CodexRunJobUseCase:
     """Instantiate the Codex run job use case."""
     return CodexRunJobUseCaseImpl(
@@ -263,6 +297,7 @@ def new_codex_run_job_use_case(
         storage=storage,
         codex_executor=codex_executor,
         default_working_directory=default_working_directory,
+        event_publisher=event_publisher,
     )
 
 def _iter_files(root: Path) -> Iterable[Path]:

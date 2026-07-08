@@ -17,6 +17,8 @@ from app.domain.job.codex_run_job_use_case.value_objects import (
     Event4CodexRunFailedPayload,
     Event5CodexRunCancelled,
     Event5CodexRunCancelledPayload,
+    Event6CodexExecOutput,
+    Event6CodexExecOutputPayload,
 )
 
 __all__ = (
@@ -34,4 +36,6 @@ __all__ = (
     "Event4CodexRunFailedPayload",
     "Event5CodexRunCancelled",
     "Event5CodexRunCancelledPayload",
+    "Event6CodexExecOutput",
+    "Event6CodexExecOutputPayload",
 )

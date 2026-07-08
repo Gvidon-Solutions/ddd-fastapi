@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import is_dataclass
 from datetime import datetime
 from typing import Any, cast, get_type_hints
-from uuid import UUID
 
-from pydantic import TypeAdapter
 from sqlalchemy import JSON, Column, DateTime, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.domain.event import EventId, get_event_class
 from app.domain.job import JobEvent, JobEventPayload, JobId
+from app.infrastructure.event import dump_event_payload, load_event_payload
 from app.infrastructure.sqlmodel.datetime import ensure_datetime_utc, get_datetime_utc
 
 
@@ -79,44 +77,26 @@ class EventDTO(SQLModel, table=True):
         *,
         job_id: JobId | None,
     ) -> JobEventPayload:
-        from app.infrastructure.sqlmodel.job.payload_codec import load_payload
-
         payload_type = get_type_hints(event_class)["payload"]
-        if not is_dataclass(payload_type):
-            raise TypeError("Event payload type must be a dataclass")
-        return load_payload(_payload_with_job_id(self.payload, job_id), payload_type)
+        return load_event_payload(_payload_with_job_id(self.payload, job_id), payload_type)
 
     @classmethod
     def from_job_event(cls, event: JobEvent) -> EventDTO:
         """Build a persistence DTO from a job event domain entity."""
         return cls(
-            event_id=event.event_id.value,
+            event_id=event.event_id,
             type=event.type,
             source=event.source,
             version=event.version,
-            payload=_payload_to_record(event.payload),
+            payload=dump_event_payload(event.payload),
             created_at=event.created_at,
         )
-
-
-def _data_to_record(data):
-    if is_dataclass(data):
-        from app.infrastructure.sqlmodel.job.payload_codec import dump_payload
-
-        return dump_payload(data)
-    if isinstance(data, dict):
-        return TypeAdapter(dict).dump_python(data, mode="json")
-    return data
-
-
-def _payload_to_record(payload: JobEventPayload | dict) -> dict:
-    return _data_to_record(payload)
 
 
 def _payload_with_job_id(payload: dict, job_id: JobId | None) -> dict:
     payload_with_job_id = dict(payload)
     if "job_id" not in payload_with_job_id and job_id is not None:
-        payload_with_job_id["job_id"] = {"value": str(job_id.value)}
+        payload_with_job_id["job_id"] = str(job_id)
     return payload_with_job_id
 
 
@@ -126,15 +106,8 @@ def _base_payload_or_record(
 ) -> JobEventPayload | dict:
     payload_with_job_id = _payload_with_job_id(payload, job_id)
     if set(payload_with_job_id) == {"job_id"}:
-        return JobEventPayload(job_id=JobId(_job_id_value(payload_with_job_id["job_id"])))
+        return JobEventPayload(job_id=JobId(uuid.UUID(str(payload_with_job_id["job_id"]))))
     return payload_with_job_id
-
-
-def _job_id_value(value: object) -> UUID:
-    if isinstance(value, dict):
-        record = cast(dict[str, object], value)
-        return UUID(str(record["value"]))
-    return UUID(str(value))
 
 
 class JobEventLinkDTO(SQLModel, table=True):

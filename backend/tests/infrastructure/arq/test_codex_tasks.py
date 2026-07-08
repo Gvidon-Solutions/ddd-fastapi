@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import pytest
 
@@ -21,6 +21,7 @@ from app.domain.job import (
     JobRepository,
     JobStatus,
     JobSummary,
+    new_job_id,
 )
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthFailedError,
@@ -40,11 +41,14 @@ from app.domain.job.codex_run_job_use_case import (
 from app.infrastructure.file_storage import FilesystemFileStorage
 from app.usecase.job.codex import (
     CodexAuthenticator,
+    CodexExecOutputHandler,
+    CodexExecOutputLine,
     CodexExecResult,
     CodexExecutor,
     new_codex_auth_use_case,
     new_codex_run_job_use_case,
 )
+from app.usecase.job.ports import EventPublisher
 
 pytestmark = pytest.mark.anyio
 
@@ -116,6 +120,17 @@ class FakeJobRepository(JobRepository):
     async def save(self, job: Job) -> None:
         """Save a job."""
         self.jobs[job.id] = job
+
+
+class FakeEventPublisher(EventPublisher):
+    """Record published job events in memory."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[JobId, JobEvent]] = []
+
+    async def emit(self, job_id: JobId, event: JobEvent) -> None:
+        """Record a published event."""
+        self.events.append((job_id, event))
 
 
 class FakeCodexAuthenticator(CodexAuthenticator):
@@ -241,10 +256,19 @@ class FakeCodexExecutor(CodexExecutor):
         dangerously_bypass_hook_trust: bool = False,
         output_last_message_path: Path | str | None = None,
         extra_options: Sequence[str] = (),
+        output_handler: CodexExecOutputHandler | None = None,
     ) -> CodexExecResult:
         """Execute fake Codex."""
         self.prompt = prompt
         self.workdir = workdir
+        if output_handler is not None:
+            await output_handler(
+                CodexExecOutputLine(
+                    channel="stdout",
+                    line_number=1,
+                    line='{"type":"message","message":"running"}',
+                )
+            )
         assert workdir is not None
         workdir.mkdir(parents=True, exist_ok=True)
         (workdir / "changed.py").write_text("print('changed')\n")
@@ -266,7 +290,7 @@ class FakeCodexExecutor(CodexExecutor):
 def _codex_auth_job() -> CodexAuthJobV1:
     now = datetime(2026, 6, 23, tzinfo=UTC)
     return CodexAuthJobV1(
-        id=JobId.generate(),
+        id=new_job_id(),
         type="execute_codex_auth_job_use_case",
         version="v1",
         name="execute_codex_auth_job_use_case",
@@ -287,7 +311,7 @@ def _codex_auth_job() -> CodexAuthJobV1:
 def _codex_run_job(job_input: CodexRunInputV1) -> CodexRunJobV1:
     now = datetime(2026, 6, 23, tzinfo=UTC)
     return CodexRunJobV1(
-        id=JobId.generate(),
+        id=new_job_id(),
         type="execute_codex_run_job_use_case",
         version="v1",
         name="execute_codex_run_job_use_case",
@@ -308,11 +332,13 @@ def _codex_run_job(job_input: CodexRunInputV1) -> CodexRunJobV1:
 async def test_codex_auth_stores_result_without_durable_login_code() -> None:
     job = _codex_auth_job()
     jobs = FakeJobRepository(job)
+    event_publisher = FakeEventPublisher()
     auth_sessions = FakeAuthSessionRepository()
     use_case = new_codex_auth_use_case(
         jobs=jobs,
         codex_authenticator=FakeCodexAuthenticator(),
         auth_sessions=auth_sessions,
+        event_publisher=event_publisher,
     )
 
     result = await use_case.execute(job)
@@ -326,11 +352,13 @@ async def test_codex_auth_stores_result_without_durable_login_code() -> None:
     assert auth_sessions.session.user_code == "ABCD-EFGH"
     assert auth_sessions.authenticated_job_id == job.id
     assert all(event.source == "codex_auth_job_use_case" for _, event in jobs.events)
+    assert event_publisher.events == jobs.events
 
 
 async def test_codex_auth_failure_raises_domain_error_and_records_failure() -> None:
     job = _codex_auth_job()
     jobs = FakeJobRepository(job)
+    event_publisher = FakeEventPublisher()
     auth_sessions = FakeAuthSessionRepository()
     use_case = new_codex_auth_use_case(
         jobs=jobs,
@@ -341,6 +369,7 @@ async def test_codex_auth_failure_raises_domain_error_and_records_failure() -> N
             ),
         ),
         auth_sessions=auth_sessions,
+        event_publisher=event_publisher,
     )
 
     with pytest.raises(CodexAuthFailedError, match="access denied"):
@@ -348,17 +377,20 @@ async def test_codex_auth_failure_raises_domain_error_and_records_failure() -> N
 
     assert auth_sessions.failed == (job.id, "access denied")
     assert jobs.events[-1][1].type == "CodexAuthFailedV1"
+    assert event_publisher.events == jobs.events
 
 
 async def test_codex_auth_cancellation_updates_job_and_kills_authenticator() -> None:
     job = _codex_auth_job()
     jobs = FakeJobRepository(job)
+    event_publisher = FakeEventPublisher()
     authenticator = FakeCodexAuthenticator(cancel_on_wait=True)
     auth_sessions = FakeAuthSessionRepository()
     use_case = new_codex_auth_use_case(
         jobs=jobs,
         codex_authenticator=authenticator,
         auth_sessions=auth_sessions,
+        event_publisher=event_publisher,
     )
 
     with pytest.raises(asyncio.CancelledError):
@@ -369,6 +401,7 @@ async def test_codex_auth_cancellation_updates_job_and_kills_authenticator() -> 
     assert job.error is None
     assert auth_sessions.cancelled == (job.id, "Job cancelled")
     assert jobs.events[-1][1].type == "CodexAuthCancelledV1"
+    assert event_publisher.events == jobs.events
 
 
 async def test_codex_run_creates_output_and_log_files(tmp_path: Path) -> None:
@@ -379,6 +412,7 @@ async def test_codex_run_creates_output_and_log_files(tmp_path: Path) -> None:
         ),
     )
     jobs = FakeJobRepository(job)
+    event_publisher = FakeEventPublisher()
     storage = FilesystemFileStorage(root=tmp_path / "files")
     codex_executor = FakeCodexExecutor()
     use_case = new_codex_run_job_use_case(
@@ -386,6 +420,7 @@ async def test_codex_run_creates_output_and_log_files(tmp_path: Path) -> None:
         storage=storage,
         codex_executor=codex_executor,
         default_working_directory=tmp_path / "default-workdir",
+        event_publisher=event_publisher,
     )
 
     output = await use_case.execute(job)
@@ -411,6 +446,18 @@ async def test_codex_run_creates_output_and_log_files(tmp_path: Path) -> None:
     assert await storage.read(files_by_name["changed.py"].location) == b"print('changed')\n"
     assert codex_executor.prompt == "Review repository"
     assert codex_executor.workdir == tmp_path / "workdir" / str(job.id)
+    assert [event.type for _, event in jobs.events] == [
+        "CodexRunStartedV1",
+        "CodexExecOutputV1",
+        "CodexRunFileCreatedV1",
+        "CodexRunFileCreatedV1",
+        "CodexRunFileCreatedV1",
+        "CodexRunFileCreatedV1",
+        "CodexRunSucceededV1",
+    ]
+    payload = cast(dict[str, object], jobs.events[1][1].payload)
+    assert payload["line"] == '{"type":"message","message":"running"}'
+    assert event_publisher.events == jobs.events
 
 
 async def test_codex_run_cancellation_updates_job_and_kills_executor(
@@ -423,6 +470,7 @@ async def test_codex_run_cancellation_updates_job_and_kills_executor(
         ),
     )
     jobs = FakeJobRepository(job)
+    event_publisher = FakeEventPublisher()
     storage = FilesystemFileStorage(root=tmp_path / "files")
     codex_executor = FakeCodexExecutor(cancel_on_exec=True)
     use_case = new_codex_run_job_use_case(
@@ -430,6 +478,7 @@ async def test_codex_run_cancellation_updates_job_and_kills_executor(
         storage=storage,
         codex_executor=codex_executor,
         default_working_directory=tmp_path / "default-workdir",
+        event_publisher=event_publisher,
     )
 
     with pytest.raises(asyncio.CancelledError):
@@ -439,3 +488,4 @@ async def test_codex_run_cancellation_updates_job_and_kills_executor(
     assert job.status == JobStatus.RUNNING
     assert job.error is None
     assert jobs.events[-1][1].type == "CodexRunCancelledV1"
+    assert event_publisher.events == jobs.events

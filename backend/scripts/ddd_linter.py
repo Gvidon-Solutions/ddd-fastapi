@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -35,6 +36,12 @@ FORBIDDEN_USECASE_IMPORT_PREFIXES = (
     "arq",
 )
 ARCH_DIRS = {"entities", "value_objects", "repositories", "exceptions"}
+IDENTIFIER_VALUE_ACCESS = re.compile(
+    r"\b(?:event_id|file_id|job_id|item_id|user_id|parent_job_id|owner_id)\.value\b"
+    r"|\b(?:job\.id|event\.event_id|file\.file_id|job_file\.file_id|job_file\.job_id"
+    r"|item\.id|item\.owner_id|user\.id|summary\.id|details\.id|created\.id"
+    r"|created\.parent_job_id)\.value\b"
+)
 
 
 @dataclass(frozen=True)
@@ -95,7 +102,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--check",
-        choices=("all", "imports", "dataclasses", "exceptions", "repositories", "tests"),
+        choices=(
+            "all",
+            "imports",
+            "dataclasses",
+            "exceptions",
+            "repositories",
+            "tests",
+            "identifiers",
+        ),
         default="all",
     )
     args = parser.parse_args()
@@ -107,6 +122,7 @@ def main() -> int:
         "exceptions": check_exceptions,
         "repositories": check_repositories,
         "tests": check_tests,
+        "identifiers": check_identifiers,
     }
     selected = checks.values() if args.check == "all" else (checks[args.check],)
 
@@ -198,6 +214,15 @@ def check_dataclasses(modules: list[ModuleInfo]) -> list[Violation]:
         if not dataclasses:
             continue
 
+        if is_domain_identifier_file(module.path):
+            violations.append(
+                Violation(
+                    code="DDD104",
+                    path=module.path,
+                    message="identifier value objects must be typed UUID aliases, not dataclass wrappers",
+                )
+            )
+
         if not dataclass_allowed_path(module.path):
             names = ", ".join(class_.name for class_ in dataclasses)
             violations.append(
@@ -235,6 +260,23 @@ def check_dataclasses(modules: list[ModuleInfo]) -> list[Violation]:
                         message=f"file name should be `{expected}.py` for `{dataclasses[0].name}`",
                     )
                 )
+    return violations
+
+
+def check_identifiers(_modules: list[ModuleInfo]) -> list[Violation]:
+    """Check repository-wide identifier value object conventions."""
+    violations: list[Violation] = []
+    for root in (APP_ROOT, TEST_ROOT):
+        for path in python_files(root):
+            for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+                if IDENTIFIER_VALUE_ACCESS.search(line):
+                    violations.append(
+                        Violation(
+                            code="DDD501",
+                            path=path,
+                            message=f"identifier values are UUID aliases; remove `.value` on line {lineno}",
+                        )
+                    )
     return violations
 
 
@@ -392,6 +434,15 @@ def is_domain_entity_or_value_object_file(path: Path) -> bool:
     if not is_under(path, APP_ROOT / "domain"):
         return False
     return "entities" in path.parts or "value_objects" in path.parts
+
+
+def is_domain_identifier_file(path: Path) -> bool:
+    """Return whether this file defines a domain identifier value object."""
+    return (
+        is_under(path, APP_ROOT / "domain")
+        and "value_objects" in path.parts
+        and path.stem.endswith("_id")
+    )
 
 
 def should_skip_test_mirror(path: Path) -> bool:

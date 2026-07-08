@@ -14,6 +14,7 @@ ARQ_DB_ENGINE = "db_engine"
 ARQ_FILE_STORAGE = "file_storage"
 ARQ_CODEX_AUTHENTICATOR = "codex_authenticator"
 ARQ_CODEX_AUTH_SESSION_REPOSITORY = "codex_auth_session_repository"
+ARQ_REDIS = "redis"
 
 
 class AutocommitJobRepository(JobRepositoryImpl):

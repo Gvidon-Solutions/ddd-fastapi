@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from app.domain.event import EventId
-from app.domain.file import File, FileId, FileKind, FileLocation, FileStatus
+from app.domain.event import new_event_id
+from app.domain.file import File, FileKind, FileLocation, FileStatus, new_file_id
 from app.domain.job import (
     ActorType,
     DuplicateJobContractError,
@@ -15,8 +15,8 @@ from app.domain.job import (
     JobEventPayload,
     JobFile,
     JobFileRole,
-    JobId,
     JobStatus,
+    new_job_id,
 )
 
 
@@ -36,7 +36,7 @@ def test_job_represents_a_pending_execution() -> None:
     )
 
     job = Job(
-        id=JobId.generate(),
+        id=new_job_id(),
         type="execute_codex_run_job_use_case",
         version="v1",
         name="Run Codex",
@@ -63,9 +63,9 @@ def test_job_represents_a_pending_execution() -> None:
 
 def test_job_file_and_event_capture_execution_output() -> None:
     now = datetime(2026, 6, 23, tzinfo=UTC)
-    job_id = JobId.generate()
+    job_id = new_job_id()
     file = File(
-        file_id=FileId.generate(),
+        file_id=new_file_id(),
         name="changed.py",
         kind=FileKind.FILE,
         location=FileLocation(
@@ -96,7 +96,7 @@ def test_job_file_and_event_capture_execution_output() -> None:
         attached_at=now,
     )
     event = JobEvent(
-        event_id=EventId.generate(),
+        event_id=new_event_id(),
         type="JobFileCreatedV1",
         source="job",
         version="v1",

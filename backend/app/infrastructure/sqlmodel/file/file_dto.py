@@ -66,7 +66,7 @@ class FileDTO(SQLModel, table=True):
     def from_entity(cls, file: File) -> FileDTO:
         """Build a DTO from a domain file."""
         return cls(
-            file_id=file.file_id.value,
+            file_id=file.file_id,
             name=file.name,
             kind=file.kind.value,
             location_uri=file.location.uri,

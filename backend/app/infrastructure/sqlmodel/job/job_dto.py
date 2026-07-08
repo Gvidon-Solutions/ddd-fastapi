@@ -119,7 +119,7 @@ class JobDTO(SQLModel, table=True):
     def from_entity(cls, job: Job, *, initiator_id: uuid.UUID) -> JobDTO:
         """Build a persistence DTO from a domain entity."""
         return cls(
-            job_id=job.id.value,
+            job_id=job.id,
             type=job.type,
             version=job.version,
             name=job.name,
@@ -128,7 +128,7 @@ class JobDTO(SQLModel, table=True):
             result=_to_record(job.result),
             status=job.status.value,
             initiator_id=initiator_id,
-            parent_job_id=job.parent_job_id.value
+            parent_job_id=job.parent_job_id
             if job.parent_job_id is not None
             else None,
             requested_at=job.requested_at,

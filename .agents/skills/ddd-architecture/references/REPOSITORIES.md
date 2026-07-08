@@ -42,7 +42,7 @@ class TodoRepositoryImpl(TodoRepository):
 
     def find_by_id(self, todo_id: TodoId) -> Optional[Todo]:
         try:
-            row = self.session.query(TodoDTO).filter_by(id=todo_id.value).one()
+            row = self.session.query(TodoDTO).filter_by(id=todo_id).one()
         except NoResultFound:
             return None
         return row.to_entity()
@@ -59,7 +59,7 @@ class TodoRepositoryImpl(TodoRepository):
     def save(self, todo: Todo) -> None:
         todo_dto = TodoDTO.from_entity(todo)
         try:
-            existing = self.session.query(TodoDTO).filter_by(id=todo.id.value).one()
+            existing = self.session.query(TodoDTO).filter_by(id=todo.id).one()
         except NoResultFound:
             self.session.add(todo_dto)
         else:
@@ -70,7 +70,7 @@ class TodoRepositoryImpl(TodoRepository):
             existing.completed_at = todo_dto.completed_at
 
     def delete(self, todo_id: TodoId) -> None:
-        self.session.query(TodoDTO).filter_by(id=todo_id.value).delete()
+        self.session.query(TodoDTO).filter_by(id=todo_id).delete()
 ```
 
 ### Factory Function
@@ -111,10 +111,10 @@ class TodoDTO(Base):
             if self.completed_at else None,
         )
 
-    @staticmethod
-    def from_entity(todo: Todo) -> "TodoDTO":
-        return TodoDTO(
-            id=todo.id.value,
+    @classmethod
+    def from_entity(cls, todo: Todo) -> "TodoDTO":
+        return cls(
+            id=todo.id,
             title=todo.title.value,
             description=todo.description.value if todo.description else None,
             status=todo.status.value,

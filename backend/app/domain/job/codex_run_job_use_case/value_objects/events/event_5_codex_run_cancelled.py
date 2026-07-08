@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-from app.domain.event import EventId
+from app.domain.event import EventId, new_event_id
 from app.domain.job.base.entities import JobEvent
 from app.domain.job.base.value_objects import JobEventPayload
 
@@ -25,7 +25,7 @@ class Event5CodexRunCancelledPayload(JobEventPayload):
 class Event5CodexRunCancelled(JobEvent):
     """Represent the Codex run cancelled event."""
 
-    event_id: EventId = field(default_factory=EventId.generate, init=False)
+    event_id: EventId = field(default_factory=new_event_id, init=False)
     type: Literal["CodexRunCancelledV1"] = field(
         default="CodexRunCancelledV1",
         init=False,

@@ -51,8 +51,8 @@ class JobFileDTO(SQLModel, table=True):
     def from_entity(cls, job_file: JobFile) -> JobFileDTO:
         """Build a DTO from a domain association."""
         return cls(
-            job_id=job_file.job_id.value,
-            file_id=job_file.file_id.value,
+            job_id=job_file.job_id,
+            file_id=job_file.file_id,
             role=job_file.role.value,
             description=job_file.description,
             created_at=job_file.attached_at,

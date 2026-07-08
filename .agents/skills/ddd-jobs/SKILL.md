@@ -89,6 +89,12 @@ Rules:
 - Do not re-parse `job.input` from `dict`.
 - Do not defensively check the contract type inside business logic.
 - Write business events with `payload.job_id`.
+- Persist business events through `JobRepository.append_event(...)` and publish
+  live updates through the separate `EventPublisher.emit(...)` port.
+- Redis event publishing is not a repository responsibility. Job repository
+  append remains durable persistence only.
+- Each running job publishes live events to its own stream:
+  `job-events:{job_id}`.
 - Add job files as `JobFile`, not as nested `File` containers.
 - Use job-specific domain repositories for job-owned entities.
 - Use external usecase ports for external systems.

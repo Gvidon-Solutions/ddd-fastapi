@@ -23,7 +23,7 @@ class UserPublic(SQLModel):
     def from_entity(cls, user: User) -> "UserPublic":
         """Build an API response from a domain entity."""
         return cls(
-            id=user.id.value,
+            id=user.id,
             email=user.email.value,
             full_name=user.full_name.value if user.full_name else None,
             is_active=user.is_active,

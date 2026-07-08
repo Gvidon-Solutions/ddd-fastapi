@@ -21,8 +21,8 @@ class ItemPublic(SQLModel):
     def from_entity(cls, item: Item) -> "ItemPublic":
         """Build an API response from a domain entity."""
         return cls(
-            id=item.id.value,
-            owner_id=item.owner_id.value,
+            id=item.id,
+            owner_id=item.owner_id,
             title=item.title.value,
             description=item.description.value if item.description else None,
             created_at=item.created_at,

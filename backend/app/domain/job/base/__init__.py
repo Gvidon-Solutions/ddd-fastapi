@@ -33,6 +33,7 @@ from .value_objects import (
     JobFileRole,
     JobId,
     JobStatus,
+    new_job_id,
 )
 from .value_objects.job_details import JobDetails
 from .value_objects.job_summary import JobSummary
@@ -72,4 +73,5 @@ __all__ = (
     "UnknownJobContractError",
     "get_job_class",
     "get_job_type_registry",
+    "new_job_id",
 )

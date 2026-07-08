@@ -19,7 +19,7 @@ class UserRepositoryImpl(UserRepository):
     async def save(self, user: User) -> None:
         """Insert or update a user."""
         user_dto = UserDTO.from_entity(user)
-        existing_user = await self.session.get(UserDTO, user.id.value)
+        existing_user = await self.session.get(UserDTO, user.id)
         if existing_user is None:
             self.session.add(user_dto)
             return
@@ -34,7 +34,7 @@ class UserRepositoryImpl(UserRepository):
 
     async def find_by_id(self, user_id: UserId) -> User | None:
         """Return a user by ID."""
-        user = await self.session.get(UserDTO, user_id.value)
+        user = await self.session.get(UserDTO, user_id)
         return user.to_entity() if user else None
 
     async def find_by_email(self, email: EmailAddress) -> User | None:
@@ -63,7 +63,7 @@ class UserRepositoryImpl(UserRepository):
 
     async def delete(self, user_id: UserId) -> None:
         """Delete a user by ID."""
-        user = await self.session.get(UserDTO, user_id.value)
+        user = await self.session.get(UserDTO, user_id)
         if user is not None:
             await self.session.delete(user)
 

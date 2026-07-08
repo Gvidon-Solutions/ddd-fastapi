@@ -11,8 +11,8 @@ from app.domain.job import (
     ActorType,
     Initiator,
     Job,
-    JobId,
     JobStatus,
+    new_job_id,
 )
 from app.domain.job.codex_auth_job_use_case import CodexAuthInputV1, CodexAuthJobV1
 from app.domain.job.codex_run_job_use_case import (
@@ -43,7 +43,7 @@ async def test_worker_binding_marks_job_succeeded_after_execute(db_session) -> N
     result = await wrapped({ARQ_DB_ENGINE: db_session.bind}, str(job.id))
 
     db_session.expire_all()
-    row = await db_session.get(JobDTO, job.id.value)
+    row = await db_session.get(JobDTO, job.id)
     assert result == CodexRunOutput(output_file_id=None, log_files=1, generated_files=2)
     assert cast(Any, wrapped).__name__ == "dummy_worker"
     assert called == [str(job.id)]
@@ -70,7 +70,7 @@ async def test_worker_binding_marks_job_failed_when_execute_raises(db_session) -
         await wrapped({ARQ_DB_ENGINE: db_session.bind}, str(job.id))
 
     db_session.expire_all()
-    row = await db_session.get(JobDTO, job.id.value)
+    row = await db_session.get(JobDTO, job.id)
     assert row is not None
     assert row.status == JobStatus.FAILED.value
     assert row.finished_at is not None
@@ -100,7 +100,7 @@ async def test_worker_binding_marks_job_cancelled_when_execute_is_cancelled(
         await wrapped({ARQ_DB_ENGINE: db_session.bind}, str(job.id))
 
     db_session.expire_all()
-    row = await db_session.get(JobDTO, job.id.value)
+    row = await db_session.get(JobDTO, job.id)
     assert row is not None
     assert row.status == JobStatus.CANCELLED.value
     assert row.finished_at is not None
@@ -128,7 +128,7 @@ async def test_worker_binding_skips_execute_when_claim_fails(db_session) -> None
     result = await wrapped({ARQ_DB_ENGINE: db_session.bind}, str(job.id))
 
     db_session.expire_all()
-    row = await db_session.get(JobDTO, job.id.value)
+    row = await db_session.get(JobDTO, job.id)
     assert result is None
     assert called == []
     assert row is not None
@@ -152,7 +152,7 @@ async def test_worker_binding_fails_job_when_contract_does_not_match(db_session)
         await wrapped({ARQ_DB_ENGINE: db_session.bind}, str(job.id))
 
     db_session.expire_all()
-    row = await db_session.get(JobDTO, job.id.value)
+    row = await db_session.get(JobDTO, job.id)
     assert called == []
     assert row is not None
     assert row.status == JobStatus.FAILED.value
@@ -184,7 +184,7 @@ def test_worker_binding_registry_loads_configured_package_once(monkeypatch) -> N
 def _codex_run_job(*, status: JobStatus) -> Job:
     now = datetime(2026, 7, 7, tzinfo=UTC)
     return CodexRunJobV1(
-        id=JobId.generate(),
+        id=new_job_id(),
         type=CodexRunJobV1.type,
         version=CodexRunJobV1.version,
         name="Codex run worker",
@@ -205,7 +205,7 @@ def _codex_run_job(*, status: JobStatus) -> Job:
 def _codex_auth_job(*, status: JobStatus) -> Job:
     now = datetime(2026, 7, 7, tzinfo=UTC)
     return CodexAuthJobV1(
-        id=JobId.generate(),
+        id=new_job_id(),
         type=CodexAuthJobV1.type,
         version=CodexAuthJobV1.version,
         name="Codex auth worker",

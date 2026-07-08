@@ -43,20 +43,19 @@ class TodoDescription:
 ### UUID Identifier
 
 ```python
-from dataclasses import dataclass
+from typing import NewType
 from uuid import UUID, uuid4
 
-@dataclass(frozen=True)
-class TodoId:
-    value: UUID
+TodoId = NewType("TodoId", UUID)
 
-    @staticmethod
-    def generate() -> "TodoId":
-        return TodoId(uuid4())
 
-    def __str__(self) -> str:
-        return str(self.value)
+def new_todo_id() -> TodoId:
+    return TodoId(uuid4())
 ```
+
+Identifier value objects are typed UUID aliases, not dataclass wrappers. Do not
+add `.value` to IDs. Convert transport/database UUIDs with `TodoId(uuid_value)`
+and generate new IDs with `new_*_id()` functions.
 
 ### Enum-Based Status
 

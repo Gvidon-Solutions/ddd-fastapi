@@ -2,12 +2,12 @@
 
 from app.domain.item.entities import Item
 from app.domain.item.value_objects import ItemDescription, ItemTitle
-from app.domain.user.value_objects import UserId
+from app.domain.user.value_objects import new_user_id
 
 
 def test_item_create_generates_item_for_owner() -> None:
     # Arrange
-    owner_id = UserId.generate()
+    owner_id = new_user_id()
     title = ItemTitle("Title")
     description = ItemDescription("Body")
 
@@ -22,8 +22,8 @@ def test_item_create_generates_item_for_owner() -> None:
 
 def test_item_equality_uses_identity() -> None:
     # Arrange
-    item_id = Item.create(UserId.generate(), ItemTitle("A")).id
-    owner_id = UserId.generate()
+    item_id = Item.create(new_user_id(), ItemTitle("A")).id
+    owner_id = new_user_id()
     left = Item(item_id, owner_id, ItemTitle("A"))
     right = Item(item_id, owner_id, ItemTitle("B"))
 
@@ -37,7 +37,7 @@ def test_item_equality_uses_identity() -> None:
 
 def test_item_update_content_replaces_title() -> None:
     # Arrange
-    item = Item.create(UserId.generate(), ItemTitle("Initial"))
+    item = Item.create(new_user_id(), ItemTitle("Initial"))
     title = ItemTitle("Updated")
 
     # Act
@@ -49,7 +49,7 @@ def test_item_update_content_replaces_title() -> None:
 
 def test_item_update_content_replaces_description() -> None:
     # Arrange
-    item = Item.create(UserId.generate(), ItemTitle("Initial"))
+    item = Item.create(new_user_id(), ItemTitle("Initial"))
     description = ItemDescription("Updated body")
 
     # Act
@@ -61,7 +61,7 @@ def test_item_update_content_replaces_description() -> None:
 
 def test_item_is_owned_by_returns_true_for_owner() -> None:
     # Arrange
-    owner_id = UserId.generate()
+    owner_id = new_user_id()
     item = Item.create(owner_id, ItemTitle("Title"))
 
     # Act
@@ -73,10 +73,10 @@ def test_item_is_owned_by_returns_true_for_owner() -> None:
 
 def test_item_is_owned_by_returns_false_for_other_user() -> None:
     # Arrange
-    item = Item.create(UserId.generate(), ItemTitle("Title"))
+    item = Item.create(new_user_id(), ItemTitle("Title"))
 
     # Act
-    is_owned_by_other_user = item.is_owned_by(UserId.generate())
+    is_owned_by_other_user = item.is_owned_by(new_user_id())
 
     # Assert
     assert not is_owned_by_other_user

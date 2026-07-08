@@ -2,30 +2,50 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import msgspec
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 
-from app.domain.job import Initiator, JobId
+from app.domain.job import (
+    Initiator,
+    JobId,
+    JobReadAccessDeniedError,
+    JobReadNotFoundError,
+)
 from app.domain.job.codex_auth_job_use_case import CodexAuthInputV1, CodexAuthJobV1
 from app.domain.job.codex_run_job_use_case import CodexRunInputV1, CodexRunJobV1
 from app.infrastructure.di import (
     get_codex_auth_code_use_case,
     get_create_job_use_case,
+    get_job_details_use_case,
+    get_job_event_stream,
 )
 from app.presentation.api.codex import (
     CodexAuthCodePublic,
     CodexRunCreate,
     JobLaunchPublic,
+    to_codex_job_event_message,
 )
-from app.presentation.api.common.deps import CurrentUser
+from app.presentation.api.common.deps import CurrentUser, WebSocketCurrentUser
 from app.usecase.job import (
     CodexAuthCodeAccessDeniedError,
     CodexAuthCodeJobNotFoundError,
     CodexAuthCodeJobTypeError,
     CreateJobUseCase,
     GetCodexAuthCodeUseCase,
+    GetJobDetailsUseCase,
+    JobEventStream,
 )
 
 router = APIRouter(prefix="/codex", tags=["codex"])
+_encoder = msgspec.json.Encoder()
 
 
 @router.post("/auth", response_model=JobLaunchPublic)
@@ -41,7 +61,7 @@ async def launch_codex_auth(
         description="Authenticate Codex through device login",
     )
     await create_job.execute(job)
-    return JobLaunchPublic(job_id=job.id.value)
+    return JobLaunchPublic(job_id=job.id)
 
 
 @router.get(
@@ -92,4 +112,38 @@ async def launch_codex_run(
         description="Run Codex against a workspace",
     )
     await create_job.execute(job)
-    return JobLaunchPublic(job_id=job.id.value)
+    return JobLaunchPublic(job_id=job.id)
+
+
+@router.websocket("/jobs/{job_id}/events")
+async def listen_codex_job_events(
+    websocket: WebSocket,
+    current_user: WebSocketCurrentUser,
+    job_id: UUID,
+    details_use_case: GetJobDetailsUseCase = Depends(get_job_details_use_case),
+    event_stream: JobEventStream = Depends(get_job_event_stream),
+) -> None:
+    """Stream typed Codex realtime events for one job."""
+    typed_job_id = JobId(job_id)
+    try:
+        await details_use_case.execute(typed_job_id, current_user_id=current_user.id)
+    except (JobReadNotFoundError, JobReadAccessDeniedError):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    last_event_id = websocket.query_params.get("last_event_id", "0-0")
+    try:
+        async for message in event_stream.listen(
+            typed_job_id,
+            last_event_id=last_event_id,
+        ):
+            codex_message = to_codex_job_event_message(
+                stream_id=message.stream_id,
+                event=message.event,
+            )
+            if codex_message is None:
+                continue
+            await websocket.send_text(_encoder.encode(codex_message).decode())
+    except WebSocketDisconnect:
+        return

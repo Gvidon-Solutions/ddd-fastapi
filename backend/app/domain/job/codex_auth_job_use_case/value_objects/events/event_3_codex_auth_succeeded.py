@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
-from app.domain.event import EventId
+from app.domain.event import EventId, new_event_id
 from app.domain.job.base.entities import JobEvent
 from app.domain.job.base.value_objects import JobEventPayload
 from app.domain.job.codex_auth_job_use_case.value_objects.codex_auth_result import (
@@ -28,7 +28,7 @@ class Event3CodexAuthSucceededPayload(JobEventPayload):
 class Event3CodexAuthSucceeded(JobEvent):
     """Represent the Codex auth succeeded event."""
 
-    event_id: EventId = field(default_factory=EventId.generate, init=False)
+    event_id: EventId = field(default_factory=new_event_id, init=False)
     type: Literal["CodexAuthSucceededV1"] = field(
         default="CodexAuthSucceededV1",
         init=False,

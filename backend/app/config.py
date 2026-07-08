@@ -100,8 +100,8 @@ class Settings(BaseSettings):
     ] = "never"
     CODEX_JOB_IDLE_TIMEOUT_SECONDS: int = 60
     CODEX_JOB_MAX_TURNS: int = 10
-    CODEX_JOB_EVENTS_STREAM: str = "codex-job-events"
-    CODEX_JOB_EVENTS_STREAM_MAXLEN: int = 10_000
+    JOB_EVENTS_STREAM_PREFIX: str = "job-events"
+    JOB_EVENTS_STREAM_MAXLEN: int = 10_000
     CODEX_CLI_PATH: str = "codex"
     CODEX_DEVICE_LOGIN_START_TIMEOUT_SECONDS: float = 10.0
     CODEX_AUTH_SESSION_PENDING_TTL_SECONDS: int = 10 * 60

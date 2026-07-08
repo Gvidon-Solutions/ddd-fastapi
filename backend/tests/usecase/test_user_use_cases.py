@@ -13,7 +13,12 @@ from app.domain.user.exceptions import (
     UserAccessDeniedError,
     UserNotFoundError,
 )
-from app.domain.user.value_objects import EmailAddress, FullName, PasswordHash, UserId
+from app.domain.user.value_objects import (
+    EmailAddress,
+    FullName,
+    PasswordHash,
+    new_user_id,
+)
 from app.usecase.user import (
     new_authenticate_user_use_case,
     new_create_user_use_case,
@@ -197,7 +202,7 @@ async def test_find_user_by_id_raises_not_found(admin: User) -> None:
 
     # Act / Assert
     with pytest.raises(UserNotFoundError):
-        await use_case.execute(UserId.generate(), admin)
+        await use_case.execute(new_user_id(), admin)
 
 
 async def test_update_current_user_updates_full_name(user: User) -> None:
@@ -293,7 +298,7 @@ async def test_update_user_raises_not_found(admin: User) -> None:
 
     # Act / Assert
     with pytest.raises(UserNotFoundError):
-        await use_case.execute(admin, UserId.generate())
+        await use_case.execute(admin, new_user_id())
 
 
 async def test_delete_user_rejects_admin_self_delete(admin: User) -> None:

@@ -10,9 +10,11 @@ from app.domain.job.codex_auth_job_use_case import CodexAuthJobV1, CodexAuthResu
 from app.infrastructure.arq.deps import (
     ARQ_CODEX_AUTH_SESSION_REPOSITORY,
     ARQ_CODEX_AUTHENTICATOR,
+    ARQ_REDIS,
     get_arq_db_engine,
     new_arq_job_repository,
 )
+from app.infrastructure.arq.job_event_publisher import new_redis_event_publisher
 from app.infrastructure.arq.job_workers import job_worker
 from app.usecase.job.codex import new_codex_auth_use_case
 
@@ -30,5 +32,6 @@ async def execute_codex_auth_job_use_case(
             jobs=jobs,
             codex_authenticator=ctx[ARQ_CODEX_AUTHENTICATOR],
             auth_sessions=ctx[ARQ_CODEX_AUTH_SESSION_REPOSITORY],
+            event_publisher=new_redis_event_publisher(ctx[ARQ_REDIS]),
         )
         return await use_case.execute(job)

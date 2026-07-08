@@ -2,6 +2,18 @@
 
 from __future__ import annotations
 
-from .schemas import CodexAuthCodePublic, CodexRunCreate, JobLaunchPublic
+from .schemas import (
+    CodexAuthCodePublic,
+    CodexJobEventMessage,
+    CodexRunCreate,
+    JobLaunchPublic,
+    to_codex_job_event_message,
+)
 
-__all__ = ("CodexAuthCodePublic", "CodexRunCreate", "JobLaunchPublic")
+__all__ = (
+    "CodexAuthCodePublic",
+    "CodexJobEventMessage",
+    "CodexRunCreate",
+    "JobLaunchPublic",
+    "to_codex_job_event_message",
+)

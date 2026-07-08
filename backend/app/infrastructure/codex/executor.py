@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 from app.config import settings
-from app.usecase.job.codex import CodexExecResult, CodexExecutor
+from app.usecase.job.codex import (
+    CodexExecOutputHandler,
+    CodexExecOutputLine,
+    CodexExecResult,
+    CodexExecutor,
+)
 
 
 class CodexCliExecutor(CodexExecutor):
@@ -88,6 +93,7 @@ class CodexCliExecutor(CodexExecutor):
         dangerously_bypass_hook_trust: bool = False,
         output_last_message_path: Path | str | None = None,
         extra_options: Sequence[str] = (),
+        output_handler: CodexExecOutputHandler | None = None,
     ) -> CodexExecResult:
         """Run `codex exec` non-interactively in a workspace."""
         if self._run_lock.locked():
@@ -123,6 +129,7 @@ class CodexCliExecutor(CodexExecutor):
                 dangerously_bypass_hook_trust=dangerously_bypass_hook_trust,
                 output_last_message_path=output_last_message_path,
                 extra_options=extra_options,
+                output_handler=output_handler,
             )
 
     async def _codex_exec(
@@ -154,6 +161,7 @@ class CodexCliExecutor(CodexExecutor):
         dangerously_bypass_hook_trust: bool = False,
         output_last_message_path: Path | str | None = None,
         extra_options: Sequence[str] = (),
+        output_handler: CodexExecOutputHandler | None = None,
     ) -> CodexExecResult:
         """Run `codex exec` while the executor lock is held."""
         exec_workdir = workdir or Path.cwd()
@@ -210,10 +218,20 @@ class CodexCliExecutor(CodexExecutor):
             assert process.stderr is not None
 
             stdout_task = asyncio.create_task(
-                self._read_lines(process.stdout, stdout_lines),
+                self._read_lines(
+                    process.stdout,
+                    stdout_lines,
+                    channel="stdout",
+                    output_handler=output_handler,
+                ),
             )
             stderr_task = asyncio.create_task(
-                self._read_lines(process.stderr, stderr_lines),
+                self._read_lines(
+                    process.stderr,
+                    stderr_lines,
+                    channel="stderr",
+                    output_handler=output_handler,
+                ),
             )
             if input_text is not None:
                 process.stdin.write(input_text.encode())
@@ -335,12 +353,23 @@ class CodexCliExecutor(CodexExecutor):
         self,
         stream: asyncio.StreamReader,
         lines: list[str],
+        *,
+        channel: Literal["stdout", "stderr"],
+        output_handler: CodexExecOutputHandler | None,
     ) -> None:
         """Read stream lines into a list."""
         while line := await stream.readline():
             decoded_line = line.decode(errors="replace").strip()
             if decoded_line:
                 lines.append(decoded_line)
+                if output_handler is not None:
+                    await output_handler(
+                        CodexExecOutputLine(
+                            channel=channel,
+                            line_number=len(lines),
+                            line=decoded_line,
+                        )
+                    )
 
     def _read_codex_result(
         self,

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Self, TypeVar
 
 from app.domain.job.base.entities.job import Job
-from app.domain.job.base.value_objects import Initiator, JobId, JobStatus
+from app.domain.job.base.value_objects import Initiator, JobId, JobStatus, new_job_id
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -36,7 +36,7 @@ class JobContract[InputT, ResultT](Job[InputT, ResultT]):
 
         now = datetime.now(UTC)
         return cls(
-            id=JobId.generate(),
+            id=new_job_id(),
             type=cls.type,
             version=cls.version,
             name=name,

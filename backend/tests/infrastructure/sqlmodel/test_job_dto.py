@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.domain.event import EventId
-from app.domain.file import File, FileId, FileKind, FileLocation, FileStatus
+from app.domain.event import new_event_id
+from app.domain.file import File, FileKind, FileLocation, FileStatus, new_file_id
 from app.domain.job import (
     ActorType,
     Initiator,
@@ -15,9 +15,9 @@ from app.domain.job import (
     JobEventPayload,
     JobFile,
     JobFileRole,
-    JobId,
     JobSerializationError,
     JobStatus,
+    new_job_id,
 )
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthInputV1,
@@ -27,6 +27,7 @@ from app.domain.job.codex_auth_job_use_case import (
     Event3CodexAuthSucceededPayload,
 )
 from app.domain.job.codex_run_job_use_case import CodexRunInputV1
+from app.infrastructure.event import dump_event
 from app.infrastructure.sqlmodel.event import EventDTO
 from app.infrastructure.sqlmodel.file import FileDTO
 from app.infrastructure.sqlmodel.job import JobDTO, JobFileDTO
@@ -40,7 +41,7 @@ def test_job_dto_round_trips_entity_fields() -> None:
         display_name="Anton",
     )
     job = CodexAuthJobV1(
-        id=JobId.generate(),
+        id=new_job_id(),
         type="execute_codex_auth_job_use_case",
         version="v1",
         name="Codex auth",
@@ -90,7 +91,7 @@ def test_payload_codec_rejects_unknown_fields() -> None:
 
 def test_file_and_job_file_dtos_round_trip_entity_fields() -> None:
     file = File(
-        file_id=FileId.generate(),
+        file_id=new_file_id(),
         name="report.txt",
         kind=FileKind.FILE,
         location=FileLocation(
@@ -114,7 +115,7 @@ def test_file_and_job_file_dtos_round_trip_entity_fields() -> None:
         delete_attempts=file.delete_attempts,
         last_delete_error=file.last_delete_error,
         created_at=file.created_at,
-        job_id=JobId.generate(),
+        job_id=new_job_id(),
         role=JobFileRole.OUTPUT,
         description=None,
         attached_at=datetime(2026, 6, 23, tzinfo=UTC),
@@ -128,9 +129,9 @@ def test_file_and_job_file_dtos_round_trip_entity_fields() -> None:
 
 
 def test_event_dto_round_trips_job_event_fields() -> None:
-    job_id = JobId.generate()
+    job_id = new_job_id()
     event = JobEvent(
-        event_id=EventId.generate(),
+        event_id=new_event_id(),
         type="JobFileCreatedV1",
         source="job",
         version="v1",
@@ -138,30 +139,32 @@ def test_event_dto_round_trips_job_event_fields() -> None:
         payload=JobEventPayload(job_id=job_id),
     )
 
-    entity = EventDTO.from_job_event(event).to_job_event()
+    dto = EventDTO.from_job_event(event)
+    entity = dto.to_job_event()
 
+    assert dto.payload == dump_event(event)["payload"]
     assert entity == event
 
 
 def test_event_dto_preserves_unknown_job_event_payload() -> None:
-    job_id = JobId.generate()
+    job_id = new_job_id()
     event = JobEvent(
-        event_id=EventId.generate(),
+        event_id=new_event_id(),
         type="UnknownJobEventV1",
         source="job",
         version="v1",
         created_at=datetime(2026, 6, 23, tzinfo=UTC),
-        payload={"job_id": job_id.value, "file_id": "file-1"},
+        payload={"job_id": job_id, "file_id": "file-1"},
     )
 
     entity = EventDTO.from_job_event(event).to_job_event()
 
     assert entity.event_id == event.event_id
-    assert entity.payload == {"job_id": str(job_id.value), "file_id": "file-1"}
+    assert entity.payload == {"job_id": str(job_id), "file_id": "file-1"}
 
 
 def test_event_dto_casts_to_typed_event_dataclass() -> None:
-    job_id = JobId.generate()
+    job_id = new_job_id()
     result = CodexAuthResult(authenticated=True)
     event = Event3CodexAuthSucceeded(
         created_at=datetime(2026, 6, 23, tzinfo=UTC),

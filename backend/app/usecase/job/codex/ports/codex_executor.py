@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from app.domain.job.codex_run_job_use_case import CodexExecFailedError
+
+
+@dataclass(frozen=True)
+class CodexExecOutputLine:
+    """Represent one line emitted by Codex exec."""
+
+    channel: Literal["stdout", "stderr"]
+    line_number: int
+    line: str
+
+
+CodexExecOutputHandler = Callable[[CodexExecOutputLine], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -132,5 +144,6 @@ class CodexExecutor(ABC):
         dangerously_bypass_hook_trust: bool = False,
         output_last_message_path: Path | str | None = None,
         extra_options: Sequence[str] = (),
+        output_handler: CodexExecOutputHandler | None = None,
     ) -> CodexExecResult:
         """Run `codex exec` non-interactively."""

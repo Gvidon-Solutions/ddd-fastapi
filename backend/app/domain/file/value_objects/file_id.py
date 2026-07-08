@@ -1,20 +1,11 @@
-"""Define the File identifier value object."""
+"""Define the File identifier type."""
 
-from dataclasses import dataclass
+from typing import NewType
 from uuid import UUID, uuid4
 
+FileId = NewType("FileId", UUID)
 
-@dataclass(frozen=True)
-class FileId:
-    """Represent the unique identifier for a file."""
 
-    value: UUID
-
-    @classmethod
-    def generate(cls) -> "FileId":
-        """Generate a new identifier for a file."""
-        return cls(uuid4())
-
-    def __str__(self) -> str:
-        """Return the string representation of the UUID."""
-        return str(self.value)
+def new_file_id() -> FileId:
+    """Generate a new identifier for a file."""
+    return FileId(uuid4())

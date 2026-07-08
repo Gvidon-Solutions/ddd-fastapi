@@ -20,7 +20,7 @@ class ItemRepositoryImpl(ItemRepository):
     async def save(self, item: Item) -> None:
         """Insert or update an item."""
         item_dto = ItemDTO.from_entity(item)
-        existing_item = await self.session.get(ItemDTO, item.id.value)
+        existing_item = await self.session.get(ItemDTO, item.id)
         if existing_item is None:
             self.session.add(item_dto)
             return
@@ -33,7 +33,7 @@ class ItemRepositoryImpl(ItemRepository):
 
     async def find_by_id(self, item_id: ItemId) -> Item | None:
         """Return an item by ID."""
-        item = await self.session.get(ItemDTO, item_id.value)
+        item = await self.session.get(ItemDTO, item_id)
         return item.to_entity() if item else None
 
     async def find_all(self, offset: int = 0, limit: int = 100) -> list[Item]:
@@ -56,7 +56,7 @@ class ItemRepositoryImpl(ItemRepository):
         """Return items owned by one user."""
         statement = (
             select(ItemDTO)
-            .where(ItemDTO.owner_id == owner_id.value)
+            .where(ItemDTO.owner_id == owner_id)
             .order_by(col(ItemDTO.created_at).desc())
             .offset(offset)
             .limit(limit)
@@ -75,14 +75,14 @@ class ItemRepositoryImpl(ItemRepository):
         statement = (
             select(func.count())
             .select_from(ItemDTO)
-            .where(ItemDTO.owner_id == owner_id.value)
+            .where(ItemDTO.owner_id == owner_id)
         )
         result = await self.session.exec(statement)
         return result.one()
 
     async def delete(self, item_id: ItemId) -> None:
         """Delete an item by ID."""
-        item = await self.session.get(ItemDTO, item_id.value)
+        item = await self.session.get(ItemDTO, item_id)
         if item is not None:
             await self.session.delete(item)
 

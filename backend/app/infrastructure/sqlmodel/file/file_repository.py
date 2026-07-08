@@ -20,7 +20,7 @@ class FileRepositoryImpl(FileRepository):
 
     async def get(self, file_id: FileId) -> File:
         """Return file metadata."""
-        file = await self.session.get(FileDTO, file_id.value)
+        file = await self.session.get(FileDTO, file_id)
         if file is None:
             raise KeyError(str(file_id))
         return file.to_entity()

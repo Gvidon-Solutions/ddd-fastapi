@@ -1,20 +1,11 @@
-"""Define the Job identifier value object."""
+"""Define the Job identifier type."""
 
-from dataclasses import dataclass
+from typing import NewType
 from uuid import UUID, uuid4
 
+JobId = NewType("JobId", UUID)
 
-@dataclass(frozen=True)
-class JobId:
-    """Represent the unique identifier for a job."""
 
-    value: UUID
-
-    @classmethod
-    def generate(cls) -> "JobId":
-        """Generate a new identifier for a job."""
-        return cls(uuid4())
-
-    def __str__(self) -> str:
-        """Return the string representation of the UUID."""
-        return str(self.value)
+def new_job_id() -> JobId:
+    """Generate a new identifier for a job."""
+    return JobId(uuid4())

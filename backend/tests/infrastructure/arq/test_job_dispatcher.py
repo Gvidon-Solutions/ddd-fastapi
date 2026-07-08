@@ -92,7 +92,7 @@ async def test_dispatch_once_enqueues_pending_job(db_session) -> None:
         batch_size=10,
     )
 
-    job_row = await db_session.get(JobDTO, job.id.value)
+    job_row = await db_session.get(JobDTO, job.id)
     assert dispatched == 1
     assert runtime.enqueued == [("execute_codex_run_job_use_case", job.id)]
     assert job_row is not None
@@ -154,7 +154,7 @@ async def test_dispatch_once_ignores_non_pending_job(db_session) -> None:
         batch_size=10,
     )
 
-    job_row = await db_session.get(JobDTO, job.id.value)
+    job_row = await db_session.get(JobDTO, job.id)
     assert dispatched == 0
     assert runtime.enqueued == []
     assert job_row is not None
@@ -179,7 +179,7 @@ async def test_dispatch_once_keeps_pending_job_when_enqueue_fails(db_session) ->
         batch_size=10,
     )
 
-    job_row = await db_session.get(JobDTO, job.id.value)
+    job_row = await db_session.get(JobDTO, job.id)
     assert dispatched == 0
     assert runtime.enqueued == []
     assert job_row is not None
