@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.domain.job import (
-    JobContract,
+    Job,
     JobError,
     JobId,
     UnknownJobContractError,
@@ -24,7 +24,7 @@ from app.infrastructure.arq.deps import get_arq_db_engine, new_arq_job_repositor
 ResultT = TypeVar("ResultT")
 
 type ArqWorkerFunction[ResultT] = Callable[..., Awaitable[ResultT]]
-type ExecutableJobContract = type[JobContract[Any, Any]]
+type ExecutableJob = type[Job[Any, Any]]
 
 
 class JobWorkerBindingRegistry:
@@ -81,7 +81,7 @@ def job_worker[ResultT](
 
 def _claim_running_before_execute[ResultT](
     function: ArqWorkerFunction[ResultT],
-    contract: ExecutableJobContract,
+    contract: ExecutableJob,
 ) -> ArqWorkerFunction[ResultT | None]:
     @wraps(function)
     async def wrapped(ctx: dict[str, Any], job_id: str, *args: Any, **kwargs: Any):
@@ -116,8 +116,8 @@ async def _claim_execution(ctx: dict[str, Any], job_id: JobId) -> bool:
 async def _load_job(
     ctx: dict[str, Any],
     job_id: JobId,
-    contract: ExecutableJobContract,
-) -> JobContract[Any, Any]:
+    contract: ExecutableJob,
+) -> Job[Any, Any]:
     engine = get_arq_db_engine(ctx)
     async with AsyncSession(engine) as session:
         jobs = new_arq_job_repository(session)
@@ -127,18 +127,29 @@ async def _load_job(
                 f"Expected {contract.type} {contract.version}, "
                 f"got {job.type} {job.version}"
             )
-        return cast(JobContract[Any, Any], job)
+        return cast(Job[Any, Any], job)
 
 
-def _contract_from_worker(function: ArqWorkerFunction) -> ExecutableJobContract:
+def _contract_from_worker(function: ArqWorkerFunction) -> ExecutableJob:
     hints = get_type_hints(function)
     contract = hints.get("job")
-    if not isinstance(contract, type) or not issubclass(contract, JobContract):
+    if not isinstance(contract, type) or not issubclass(contract, Job):
         raise TypeError(
             f"{getattr(function, '__name__', repr(function))} must annotate "
-            "its job argument with a JobContract"
+            "its job argument with a Job"
+        )
+    if not _has_payload_classes(contract):
+        raise TypeError(
+            f"{getattr(function, '__name__', repr(function))} must annotate "
+            "its job argument with a typed Job entity"
         )
     return contract
+
+
+def _has_payload_classes(job_class: type[Job]) -> bool:
+    input_type = getattr(job_class, "input", None)
+    result_type = getattr(job_class, "result", None)
+    return isinstance(input_type, type) and isinstance(result_type, type)
 
 
 async def _mark_succeeded(ctx: dict[str, Any], job_id: JobId, result: object) -> bool:

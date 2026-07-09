@@ -19,6 +19,7 @@ from app.domain.job import (
     JobFile,
     JobFileRole,
     JobId,
+    JobNotFoundError,
     JobRepository,
     JobStatus,
     JobSummary,
@@ -51,6 +52,8 @@ class FakeJobRepository(JobRepository):
 
     async def get(self, job_id: JobId) -> Job:
         """Return a job."""
+        if job_id not in self.jobs:
+            raise JobNotFoundError(str(job_id))
         return self.jobs[job_id]
 
     async def get_detail(self, job_id: JobId) -> JobDetails:
@@ -58,24 +61,26 @@ class FakeJobRepository(JobRepository):
         _ = job_id
         raise NotImplementedError
 
+    async def get_status(self, job_id: JobId) -> JobStatus:
+        """Return job status."""
+        if job_id not in self.jobs:
+            raise JobNotFoundError(str(job_id))
+        return self.jobs[job_id].status
+
     async def list_by_initiator(self, initiator_external_id: str) -> list[JobSummary]:
         """Return jobs by initiator."""
         return [
-            JobSummary(
-                id=job.id,
-                type=job.type,
-                version=job.version,
-                name=job.name,
-                status=job.status,
-                initiator=job.initiator,
-                parent_job_id=job.parent_job_id,
-                requested_at=job.requested_at,
-                updated_at=job.updated_at,
-                started_at=job.started_at,
-                finished_at=job.finished_at,
-            )
+            _job_summary(job)
             for job in self.jobs.values()
             if job.initiator.external_id == initiator_external_id
+        ]
+
+    async def list_children(self, parent_job_id: JobId) -> list[JobSummary]:
+        """Return direct child jobs."""
+        return [
+            _job_summary(job)
+            for job in self.jobs.values()
+            if job.parent_job_id == parent_job_id
         ]
 
     async def add_file(self, job_file: JobFile) -> None:
@@ -112,6 +117,8 @@ class FakeJobRepository(JobRepository):
         finished_at: datetime,
     ) -> bool:
         """Atomically mark a cancellable job as cancelled."""
+        if job_id not in self.jobs:
+            raise JobNotFoundError(str(job_id))
         job = self.jobs[job_id]
         if job.status not in {JobStatus.PENDING, JobStatus.QUEUED, JobStatus.RUNNING}:
             return False
@@ -169,8 +176,12 @@ class FakeJobRuntime(JobRuntime):
         return None
 
 
-def _codex_run_job(parent_job_id: JobId | None = None) -> Job:
-    return CodexRunJobV1.new(
+def _codex_run_job(
+    parent_job_id: JobId | None = None,
+    *,
+    status: JobStatus = JobStatus.PENDING,
+) -> Job:
+    job = CodexRunJobV1.new(
         initiator=Initiator(
             type=ActorType.USER,
             external_id=str(OWNER_ID),
@@ -180,6 +191,24 @@ def _codex_run_job(parent_job_id: JobId | None = None) -> Job:
         name="Run Codex",
         description="Run Codex against repository",
         parent_job_id=parent_job_id,
+    )
+    job.status = status
+    return job
+
+
+def _job_summary(job: Job) -> JobSummary:
+    return JobSummary(
+        id=job.id,
+        type=job.type,
+        version=job.version,
+        name=job.name,
+        status=job.status,
+        initiator=job.initiator,
+        parent_job_id=job.parent_job_id,
+        requested_at=job.requested_at,
+        updated_at=job.updated_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
     )
 
 
@@ -230,8 +259,7 @@ async def test_create_job_use_case_rejects_non_pending_job() -> None:
 async def test_cancel_job_cancels_queue_and_marks_job_cancelled() -> None:
     jobs = FakeJobRepository()
     runtime = FakeJobRuntime()
-    job = _codex_run_job()
-    job.status = JobStatus.QUEUED
+    job = _codex_run_job(status=JobStatus.QUEUED)
     await jobs.create(job)
     cancel_use_case = new_cancel_job_use_case(jobs=jobs, runtime=runtime)
 
@@ -247,8 +275,7 @@ async def test_cancel_job_cancels_queue_and_marks_job_cancelled() -> None:
 async def test_cancel_running_job_requests_worker_cancellation_only() -> None:
     jobs = FakeJobRepository()
     runtime = FakeJobRuntime()
-    job = _codex_run_job()
-    job.status = JobStatus.RUNNING
+    job = _codex_run_job(status=JobStatus.RUNNING)
     await jobs.create(job)
     cancel_use_case = new_cancel_job_use_case(
         jobs=jobs,
@@ -264,13 +291,61 @@ async def test_cancel_running_job_requests_worker_cancellation_only() -> None:
     assert job.error is None
 
 
+async def test_cancel_job_cancels_active_descendants_before_parent() -> None:
+    # Arrange
+    jobs = FakeJobRepository()
+    runtime = FakeJobRuntime()
+    parent = _codex_run_job(status=JobStatus.QUEUED)
+    child_pending = _codex_run_job(parent_job_id=parent.id, status=JobStatus.PENDING)
+    child_running = _codex_run_job(parent_job_id=parent.id, status=JobStatus.RUNNING)
+    child_succeeded = _codex_run_job(parent_job_id=parent.id, status=JobStatus.SUCCEEDED)
+    grandchild_queued = _codex_run_job(
+        parent_job_id=child_running.id,
+        status=JobStatus.QUEUED,
+    )
+    for job in [parent, child_pending, child_running, child_succeeded, grandchild_queued]:
+        await jobs.create(job)
+    cancel_use_case = new_cancel_job_use_case(jobs=jobs, runtime=runtime)
+
+    # Act
+    await cancel_use_case.execute(parent.id, current_user_id=OWNER_ID)
+
+    # Assert
+    assert runtime.requested == [child_running.id]
+    assert runtime.cancelled == [grandchild_queued.id, child_running.id, parent.id]
+    assert parent.status == JobStatus.CANCELLED
+    assert child_pending.status == JobStatus.CANCELLED
+    assert child_running.status == JobStatus.RUNNING
+    assert child_succeeded.status == JobStatus.SUCCEEDED
+    assert grandchild_queued.status == JobStatus.CANCELLED
+
+
+async def test_cancel_job_raises_when_child_queue_does_not_cancel() -> None:
+    # Arrange
+    jobs = FakeJobRepository()
+    runtime = FakeJobRuntime()
+    runtime.cancel_result = False
+    parent = _codex_run_job(status=JobStatus.QUEUED)
+    child = _codex_run_job(parent_job_id=parent.id, status=JobStatus.QUEUED)
+    await jobs.create(parent)
+    await jobs.create(child)
+    cancel_use_case = new_cancel_job_use_case(jobs=jobs, runtime=runtime)
+
+    # Act & Assert
+    with pytest.raises(JobCancelNotAllowedError):
+        await cancel_use_case.execute(parent.id, current_user_id=OWNER_ID)
+
+    assert runtime.cancelled == [child.id]
+    assert parent.status == JobStatus.QUEUED
+    assert child.status == JobStatus.QUEUED
+
+
 async def test_cancel_job_returns_false_when_queue_does_not_cancel() -> None:
     jobs = FakeJobRepository()
     runtime = FakeJobRuntime()
     runtime.cancel_result = False
     cancel_use_case = new_cancel_job_use_case(jobs=jobs, runtime=runtime)
-    job = _codex_run_job()
-    job.status = JobStatus.QUEUED
+    job = _codex_run_job(status=JobStatus.QUEUED)
     await jobs.create(job)
 
     with pytest.raises(JobCancelNotAllowedError):

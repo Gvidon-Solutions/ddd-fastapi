@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.domain.job.base.exceptions.duplicate_job_contract_error import (
     DuplicateJobContractError,
 )
+from app.domain.job.base.exceptions.job_await_timeout_error import JobAwaitTimeoutError
 from app.domain.job.base.exceptions.job_cancel_access_denied_error import (
     JobCancelAccessDeniedError,
 )
@@ -20,16 +21,33 @@ from app.domain.job.base.exceptions.job_create_error import JobCreateError
 from app.domain.job.base.exceptions.job_create_not_pending_error import (
     JobCreateNotPendingError,
 )
+from app.domain.job.base.exceptions.job_delete_access_denied_error import (
+    JobDeleteAccessDeniedError,
+)
 from app.domain.job.base.exceptions.job_delete_error import JobDeleteError
 from app.domain.job.base.exceptions.job_delete_not_allowed_error import (
     JobDeleteNotAllowedError,
 )
+from app.domain.job.base.exceptions.job_delete_not_found_error import (
+    JobDeleteNotFoundError,
+)
 from app.domain.job.base.exceptions.job_has_children_error import JobHasChildrenError
+from app.domain.job.base.exceptions.job_not_found_error import JobNotFoundError
 from app.domain.job.base.exceptions.job_read_access_denied_error import (
     JobReadAccessDeniedError,
 )
 from app.domain.job.base.exceptions.job_read_error import JobReadError
 from app.domain.job.base.exceptions.job_read_not_found_error import JobReadNotFoundError
+from app.domain.job.base.exceptions.job_restart_access_denied_error import (
+    JobRestartAccessDeniedError,
+)
+from app.domain.job.base.exceptions.job_restart_error import JobRestartError
+from app.domain.job.base.exceptions.job_restart_not_allowed_error import (
+    JobRestartNotAllowedError,
+)
+from app.domain.job.base.exceptions.job_restart_not_found_error import (
+    JobRestartNotFoundError,
+)
 from app.domain.job.base.exceptions.job_serialization_error import JobSerializationError
 from app.domain.job.base.exceptions.unknown_job_contract_error import (
     UnknownJobContractError,
@@ -37,6 +55,7 @@ from app.domain.job.base.exceptions.unknown_job_contract_error import (
 
 __all__ = (
     "DuplicateJobContractError",
+    "JobAwaitTimeoutError",
     "JobCancelAccessDeniedError",
     "JobCancelError",
     "JobCancelNotAllowedError",
@@ -44,12 +63,19 @@ __all__ = (
     "JobContractError",
     "JobCreateError",
     "JobCreateNotPendingError",
+    "JobDeleteAccessDeniedError",
     "JobDeleteError",
     "JobDeleteNotAllowedError",
+    "JobDeleteNotFoundError",
     "JobHasChildrenError",
     "JobReadAccessDeniedError",
     "JobReadError",
+    "JobNotFoundError",
     "JobReadNotFoundError",
+    "JobRestartAccessDeniedError",
+    "JobRestartError",
+    "JobRestartNotAllowedError",
+    "JobRestartNotFoundError",
     "JobSerializationError",
     "UnknownJobContractError",
 )

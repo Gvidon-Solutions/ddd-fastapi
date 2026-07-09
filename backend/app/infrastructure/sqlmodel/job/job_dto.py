@@ -71,11 +71,11 @@ class JobDTO(SQLModel, table=True):
         if contract is None:
             raise UnknownJobContractError(f"Unknown job contract: {self.type} {self.version}")
         try:
-            input_obj = load_payload(self.input, contract.input)
+            input_obj = load_payload(self.input, _payload_type(contract, "input"))
             result_obj = None
             if self.result is not None:
                 if JobStatus(self.status) == JobStatus.SUCCEEDED:
-                    result_obj = load_payload(self.result, contract.result)
+                    result_obj = load_payload(self.result, _payload_type(contract, "result"))
                 else:
                     result_obj = self.result
         except JobSerializationError:
@@ -154,6 +154,15 @@ def _to_record(value) -> dict | None:
             raise JobSerializationError("Expected dataclass to serialize to object")
         return serialized
     return value
+
+
+def _payload_type(job_class: type[Job], field_name: str) -> type:
+    payload_type = getattr(job_class, field_name, None)
+    if not isinstance(payload_type, type):
+        raise JobSerializationError(
+            f"Job {job_class.__name__} must define {field_name} payload type"
+        )
+    return payload_type
 
 
 def _error_to_entity(error: dict | None) -> JobError | None:

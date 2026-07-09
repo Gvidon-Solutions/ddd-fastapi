@@ -23,6 +23,7 @@ from app.domain.job import (
     JobFileRole,
     JobHasChildrenError,
     JobId,
+    JobNotFoundError,
     JobRepository,
     JobSerializationError,
     JobStatus,
@@ -54,7 +55,7 @@ class JobRepositoryImpl(JobRepository):
         """Return a job by ID."""
         job = await self.session.get(JobDTO, job_id)
         if job is None:
-            raise KeyError(str(job_id))
+            raise JobNotFoundError(str(job_id))
         initiator = await self._get_initiator(job.initiator_id)
         return job.to_entity(initiator)
 
@@ -62,7 +63,7 @@ class JobRepositoryImpl(JobRepository):
         """Return job details."""
         job = await self.session.get(JobDTO, job_id)
         if job is None:
-            raise KeyError(str(job_id))
+            raise JobNotFoundError(str(job_id))
         summary = await self._summary(job)
         files = await self.list_files(job_id)
         events = await self.list_events(job_id)
@@ -85,6 +86,17 @@ class JobRepositoryImpl(JobRepository):
             events=tuple(events),
         )
 
+    async def get_status(self, job_id: JobId) -> JobStatus:
+        """Return only the current job status."""
+        status = (
+            await self.session.exec(
+                select(JobDTO.status).where(col(JobDTO.job_id) == job_id)
+            )
+        ).first()
+        if status is None:
+            raise JobNotFoundError(str(job_id))
+        return JobStatus(status)
+
     async def list_by_initiator(self, initiator_external_id: str) -> list[JobSummary]:
         """Return jobs created by an initiator external id."""
         statement = (
@@ -95,6 +107,16 @@ class JobRepositoryImpl(JobRepository):
             )
             .where(col(InitiatorDTO.external_id) == initiator_external_id)
             .order_by(col(JobDTO.requested_at).desc())
+        )
+        jobs = (await self.session.exec(statement)).all()
+        return [await self._summary(job) for job in jobs]
+
+    async def list_children(self, parent_job_id: JobId) -> list[JobSummary]:
+        """Return direct child job summaries."""
+        statement = (
+            select(JobDTO)
+            .where(col(JobDTO.parent_job_id) == parent_job_id)
+            .order_by(col(JobDTO.requested_at).asc())
         )
         jobs = (await self.session.exec(statement)).all()
         return [await self._summary(job) for job in jobs]
@@ -239,7 +261,7 @@ class JobRepositoryImpl(JobRepository):
         """Return raw execution data without typed deserialization."""
         job = await self.session.get(JobDTO, job_id)
         if job is None:
-            raise KeyError(str(job_id))
+            raise JobNotFoundError(str(job_id))
         return JobExecutionRecord(
             job_id=JobId(job.job_id),
             type=job.type,
@@ -358,7 +380,7 @@ class JobRepositoryImpl(JobRepository):
         """Delete a terminal job and clean up links/orphan metadata."""
         job = await self.session.get(JobDTO, job_id)
         if job is None:
-            raise KeyError(str(job_id))
+            raise JobNotFoundError(str(job_id))
         if JobStatus(job.status) not in _TERMINAL_STATUSES:
             raise JobDeleteNotAllowedError(str(job_id))
 
@@ -454,7 +476,7 @@ def _load_detail_input(job: JobDTO) -> object:
     if contract is None:
         return job.input
     try:
-        return load_payload(job.input, contract.input)
+        return load_payload(job.input, _payload_type(contract, "input"))
     except JobSerializationError:
         return job.input
 
@@ -466,9 +488,18 @@ def _load_detail_result(job: JobDTO) -> object | None:
     if contract is None:
         return job.result
     try:
-        return load_payload(job.result, contract.result)
+        return load_payload(job.result, _payload_type(contract, "result"))
     except JobSerializationError:
         return job.result
+
+
+def _payload_type(job_class: type[Job], field_name: str) -> type:
+    payload_type = getattr(job_class, field_name, None)
+    if not isinstance(payload_type, type):
+        raise JobSerializationError(
+            f"Job {job_class.__name__} must define {field_name} payload type"
+        )
+    return payload_type
 
 
 _TERMINAL_STATUSES = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED}

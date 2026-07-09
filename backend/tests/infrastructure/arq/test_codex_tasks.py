@@ -18,6 +18,7 @@ from app.domain.job import (
     JobFile,
     JobFileRole,
     JobId,
+    JobNotFoundError,
     JobRepository,
     JobStatus,
     JobSummary,
@@ -67,12 +68,20 @@ class FakeJobRepository(JobRepository):
 
     async def get(self, job_id: JobId) -> Job:
         """Return a job."""
+        if job_id not in self.jobs:
+            raise JobNotFoundError(str(job_id))
         return self.jobs[job_id]
 
     async def get_detail(self, job_id: JobId) -> JobDetails:
         """Return job detail."""
         _ = job_id
         raise NotImplementedError
+
+    async def get_status(self, job_id: JobId) -> JobStatus:
+        """Return job status."""
+        if job_id not in self.jobs:
+            raise JobNotFoundError(str(job_id))
+        return self.jobs[job_id].status
 
     async def list_by_initiator(self, initiator_external_id: str) -> list[JobSummary]:
         """Return jobs by initiator."""
@@ -93,6 +102,11 @@ class FakeJobRepository(JobRepository):
             for job in self.jobs.values()
             if job.initiator.external_id == initiator_external_id
         ]
+
+    async def list_children(self, parent_job_id: JobId) -> list[JobSummary]:
+        """Return no child jobs."""
+        _ = parent_job_id
+        return []
 
     async def add_file(self, job_file: JobFile) -> None:
         """Associate a file with a job."""

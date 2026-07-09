@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 from app.domain.job.base.entities import AnyJob, Job, JobEvent, JobFile
-from app.domain.job.base.value_objects import JobError, JobFileRole, JobId
+from app.domain.job.base.value_objects import JobError, JobFileRole, JobId, JobStatus
 from app.domain.job.base.value_objects.job_details import JobDetails
 from app.domain.job.base.value_objects.job_execution_record import JobExecutionRecord
 from app.domain.job.base.value_objects.job_summary import JobSummary
@@ -28,8 +28,16 @@ class JobRepository(ABC):
         """Return a job details value object."""
 
     @abstractmethod
+    async def get_status(self, job_id: JobId) -> JobStatus:
+        """Return only the current job status."""
+
+    @abstractmethod
     async def list_by_initiator(self, initiator_external_id: str) -> list[JobSummary]:
         """Return job summaries created by an initiator external id."""
+
+    @abstractmethod
+    async def list_children(self, parent_job_id: JobId) -> list[JobSummary]:
+        """Return direct child job summaries."""
 
     @abstractmethod
     async def add_file(self, job_file: JobFile) -> None:

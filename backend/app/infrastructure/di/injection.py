@@ -38,10 +38,12 @@ from app.usecase.item import (
     new_update_item_use_case,
 )
 from app.usecase.job import (
+    AwaitJobTerminalUseCase,
     CancelJobUseCase,
     CodexAuthenticator,
     CodexAuthUseCase,
     CreateJobUseCase,
+    DeleteJobUseCase,
     EventPublisher,
     FileStorage,
     GetCodexAuthCodeUseCase,
@@ -49,12 +51,16 @@ from app.usecase.job import (
     JobEventStream,
     JobRuntime,
     ListJobsUseCase,
+    RestartJobUseCase,
+    new_await_job_terminal_use_case,
     new_cancel_job_use_case,
     new_codex_auth_use_case,
     new_create_job_use_case,
+    new_delete_job_use_case,
     new_get_codex_auth_code_use_case,
     new_get_job_details_use_case,
     new_list_jobs_use_case,
+    new_restart_job_use_case,
 )
 from app.usecase.user import (
     AuthenticateUserUseCase,
@@ -204,6 +210,27 @@ def get_cancel_job_use_case(
         jobs=jobs,
         runtime=runtime,
     )
+
+
+def get_await_job_terminal_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+) -> AwaitJobTerminalUseCase:
+    """Provide the await-job-terminal use case."""
+    return new_await_job_terminal_use_case(jobs=jobs)
+
+
+def get_delete_job_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+) -> DeleteJobUseCase:
+    """Provide the delete-job use case."""
+    return new_delete_job_use_case(jobs=jobs)
+
+
+def get_restart_job_use_case(
+    jobs: JobRepository = Depends(get_job_repository),
+) -> RestartJobUseCase:
+    """Provide the restart-job use case."""
+    return new_restart_job_use_case(jobs=jobs)
 
 
 def get_list_jobs_use_case(

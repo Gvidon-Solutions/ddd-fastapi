@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from app.domain.job import JobId, JobRepository
+from app.domain.job import JobId, JobNotFoundError, JobRepository
 from app.domain.job.codex_auth_job_use_case import (
     CodexAuthCodeAccessDeniedError,
     CodexAuthCodeJobNotFoundError,
@@ -51,7 +51,7 @@ class GetCodexAuthCodeUseCaseImpl(GetCodexAuthCodeUseCase):
         """Return device auth data once it is available."""
         try:
             job = await self.jobs.get(job_id)
-        except KeyError:
+        except JobNotFoundError:
             raise CodexAuthCodeJobNotFoundError(str(job_id))
 
         if job.type != CODEX_AUTH_JOB_TYPE:

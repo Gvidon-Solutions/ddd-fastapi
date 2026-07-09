@@ -1,6 +1,7 @@
 """Job SQLModel repository tests."""
 
 from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 
@@ -16,6 +17,7 @@ from app.domain.job import (
     JobFile,
     JobFileRole,
     JobId,
+    JobNotFoundError,
     JobStatus,
     new_job_id,
 )
@@ -31,7 +33,11 @@ from app.infrastructure.sqlmodel.job import new_job_repository
 pytestmark = pytest.mark.anyio
 
 
-def _job() -> Job:
+def _job(
+    *,
+    parent_job_id: JobId | None = None,
+    status: JobStatus = JobStatus.QUEUED,
+) -> Job:
     return CodexAuthJobV1(
         id=new_job_id(),
         type="execute_codex_auth_job_use_case",
@@ -40,9 +46,9 @@ def _job() -> Job:
         description=None,
         input=CodexAuthInputV1(),
         result=None,
-        status=JobStatus.QUEUED,
+        status=status,
         initiator=Initiator(type=ActorType.USER, external_id="anton"),
-        parent_job_id=None,
+        parent_job_id=parent_job_id,
         requested_at=datetime(2026, 6, 23, tzinfo=UTC),
         updated_at=datetime(2026, 6, 23, tzinfo=UTC),
         started_at=None,
@@ -116,6 +122,48 @@ async def test_job_repository_saves_job_changes(db_session) -> None:
     await db_session.commit()
 
     assert await repository.get(job.id) == job
+
+
+async def test_job_repository_gets_job_status(db_session) -> None:
+    # Arrange
+    repository = new_job_repository(db_session)
+    job = _job(status=JobStatus.RUNNING)
+    await repository.create(job)
+    await db_session.commit()
+
+    # Act
+    status = await repository.get_status(job.id)
+
+    # Assert
+    assert status == JobStatus.RUNNING
+
+
+async def test_job_repository_get_status_raises_when_job_is_missing(db_session) -> None:
+    # Arrange
+    repository = new_job_repository(db_session)
+
+    # Act & Assert
+    with pytest.raises(JobNotFoundError):
+        await repository.get_status(JobId(UUID("11111111-1111-1111-1111-111111111111")))
+
+
+async def test_job_repository_lists_direct_child_jobs(db_session) -> None:
+    # Arrange
+    repository = new_job_repository(db_session)
+    parent = _job()
+    child = _job(parent_job_id=parent.id, status=JobStatus.PENDING)
+    grandchild = _job(parent_job_id=child.id, status=JobStatus.PENDING)
+    sibling = _job()
+    for job in [parent, child, grandchild, sibling]:
+        await repository.create(job)
+    await db_session.commit()
+
+    # Act
+    children = await repository.list_children(parent.id)
+
+    # Assert
+    assert [job.id for job in children] == [child.id]
+    assert children[0].parent_job_id == parent.id
 
 
 async def test_job_repository_lists_and_filters_files(db_session) -> None:

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from app.domain.job import (
     JobDetails,
     JobId,
+    JobNotFoundError,
     JobReadAccessDeniedError,
     JobReadNotFoundError,
     JobRepository,
@@ -33,7 +34,7 @@ class GetJobDetailsUseCaseImpl(GetJobDetailsUseCase):
         """Return job details visible to the current user."""
         try:
             details = await self.jobs.get_detail(job_id)
-        except KeyError as error:
+        except JobNotFoundError as error:
             raise JobReadNotFoundError(str(job_id)) from error
 
         if details.initiator.external_id != str(current_user_id):
